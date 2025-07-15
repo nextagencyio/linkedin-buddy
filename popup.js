@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
   const enhancedFeedToggle = document.getElementById('enhancedFeed');
   const quickActionsToggle = document.getElementById('quickActions');
   const autoExpandPostsToggle = document.getElementById('autoExpandPosts');
@@ -7,47 +7,47 @@ document.addEventListener('DOMContentLoaded', function() {
   const openChatButton = document.getElementById('openChat');
 
   // Load saved settings
-  chrome.storage.sync.get(['enhancedFeed', 'quickActions', 'autoExpandPosts', 'hideSponsored', 'chatAssistant'], function(result) {
+  chrome.storage.sync.get(['enhancedFeed', 'quickActions', 'autoExpandPosts', 'autoHideSponsored', 'chatAssistant'], function (result) {
     enhancedFeedToggle.checked = result.enhancedFeed || false;
     quickActionsToggle.checked = result.quickActions || false;
-    autoExpandPostsToggle.checked = result.autoExpandPosts !== undefined ? result.autoExpandPosts : false;
-    hideSponsoredToggle.checked = result.hideSponsored !== undefined ? result.hideSponsored : false;
+    autoExpandPostsToggle.checked = result.autoExpandPosts !== undefined ? result.autoExpandPosts : true;
+    hideSponsoredToggle.checked = result.autoHideSponsored !== undefined ? result.autoHideSponsored : false;
     chatAssistantToggle.checked = result.chatAssistant || false;
   });
 
   // Save settings when toggles change
-  enhancedFeedToggle.addEventListener('change', function() {
-    chrome.storage.sync.set({enhancedFeed: this.checked});
-    sendMessageToContentScript({action: 'toggleEnhancedFeed', enabled: this.checked});
+  enhancedFeedToggle.addEventListener('change', function () {
+    chrome.storage.sync.set({ enhancedFeed: this.checked });
+    sendMessageToContentScript({ action: 'toggleEnhancedFeed', enabled: this.checked });
   });
 
-  quickActionsToggle.addEventListener('change', function() {
-    chrome.storage.sync.set({quickActions: this.checked});
-    sendMessageToContentScript({action: 'toggleQuickActions', enabled: this.checked});
+  quickActionsToggle.addEventListener('change', function () {
+    chrome.storage.sync.set({ quickActions: this.checked });
+    sendMessageToContentScript({ action: 'toggleQuickActions', enabled: this.checked });
   });
 
-  autoExpandPostsToggle.addEventListener('change', function() {
-    chrome.storage.sync.set({autoExpandPosts: this.checked});
-    sendMessageToContentScript({action: 'toggleAutoExpandPosts', enabled: this.checked});
+  autoExpandPostsToggle.addEventListener('change', function () {
+    chrome.storage.sync.set({ autoExpandPosts: this.checked });
+    sendMessageToContentScript({ action: 'toggleAutoExpandPosts', enabled: this.checked });
   });
 
-  hideSponsoredToggle.addEventListener('change', function() {
-    chrome.storage.sync.set({hideSponsored: this.checked});
-    sendMessageToContentScript({action: 'toggleHideSponsored', enabled: this.checked});
+  hideSponsoredToggle.addEventListener('change', function () {
+    chrome.storage.sync.set({ autoHideSponsored: this.checked });
+    sendMessageToContentScript({ action: 'toggleAutoHideSponsored', enabled: this.checked });
   });
 
-  chatAssistantToggle.addEventListener('change', function() {
-    chrome.storage.sync.set({chatAssistant: this.checked});
-    sendMessageToContentScript({action: 'toggleChatAssistant', enabled: this.checked});
+  chatAssistantToggle.addEventListener('change', function () {
+    chrome.storage.sync.set({ chatAssistant: this.checked });
+    sendMessageToContentScript({ action: 'toggleChatAssistant', enabled: this.checked });
   });
 
-  openChatButton.addEventListener('click', function() {
-    sendMessageToContentScript({action: 'openChat'});
+  openChatButton.addEventListener('click', function () {
+    sendMessageToContentScript({ action: 'openChat' });
     window.close();
   });
 
   function sendMessageToContentScript(message) {
-    chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+    chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
       chrome.tabs.sendMessage(tabs[0].id, message);
     });
   }

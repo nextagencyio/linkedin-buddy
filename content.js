@@ -10,16 +10,107 @@ class LinkedInBuddy {
       enhancedFeed: false,
       quickActions: false,
       chatAssistant: false,
-      autoExpandPosts: true
+      autoExpandPosts: true,
+      autoHideSponsored: false,
     };
-    
+
     this.init();
+  }
+
+  startAutoHideSponsored() {
+    // Create observer for automatically hiding sponsored posts
+    if (this.sponsoredObserver) {
+      this.sponsoredObserver.disconnect();
+    }
+
+    this.sponsoredObserver = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        mutation.addedNodes.forEach((node) => {
+          if (node.nodeType === 1) { // Element node
+            this.hideNewSponsoredPosts(node);
+          }
+        });
+      });
+    });
+
+    this.sponsoredObserver.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+
+    // Also hide existing sponsored posts
+    this.hideNewSponsoredPosts(document);
+  }
+
+  hideNewSponsoredPosts(container) {
+    let hiddenCount = 0;
+
+    // Find all feed posts
+    const feedPosts = container.querySelectorAll ? container.querySelectorAll('.feed-shared-update-v2') : [];
+
+    feedPosts.forEach(post => {
+      // Check if post has the dismiss/hide button - if not, it's likely a sponsored post
+      const hideButton = post.querySelector('.feed-shared-control-menu__hide-post-button');
+
+      if (!hideButton && post.style.display !== 'none') {
+        // Double-check with some additional indicators to be sure
+        const hasPromotedText = post.textContent.includes('Promoted by') ||
+          post.textContent.includes('Sponsored by') ||
+          post.textContent.includes('Promoted') ||
+          post.textContent.includes('Sponsored');
+
+        const hasFollowButton = post.querySelector('.update-components-actor__follow-button');
+
+        // If no hide button AND (has promoted text OR has follow button), it's likely sponsored
+        if (hasPromotedText || hasFollowButton) {
+          post.style.display = 'none';
+          hiddenCount++;
+          console.log('LinkedIn Buddy: Hidden sponsored post (no dismiss button)', {
+            post: post,
+            hasPromotedText: hasPromotedText,
+            hasFollowButton: !!hasFollowButton,
+            promotedText: hasPromotedText ? post.textContent.match(/(Promoted by|Sponsored by)[^.]*/) : null
+          });
+        }
+      }
+    });
+
+    // Also check for explicit sponsored selectors as backup
+    const sponsoredSelectors = [
+      '[data-id*="urn:li:sponsoredUpdate"]',
+      '[aria-label*="Promoted"]',
+      '[aria-label*="Sponsored"]',
+      '[data-test-id*="sponsored"]'
+    ];
+
+    sponsoredSelectors.forEach(selector => {
+      const sponsoredPosts = container.querySelectorAll ? container.querySelectorAll(selector) : [];
+      sponsoredPosts.forEach(post => {
+        const postContainer = post.closest('.feed-shared-update-v2') || post.closest('[data-id^="urn:li:activity"]') || post;
+        if (postContainer && postContainer.style.display !== 'none') {
+          postContainer.style.display = 'none';
+          hiddenCount++;
+          console.log('LinkedIn Buddy: Hidden sponsored post (selector match)', selector, postContainer);
+        }
+      });
+    });
+
+    if (hiddenCount > 0) {
+      console.log(`LinkedIn Buddy: Auto-hidden ${hiddenCount} sponsored posts`);
+    }
+  }
+
+  stopAutoHideSponsored() {
+    if (this.sponsoredObserver) {
+      this.sponsoredObserver.disconnect();
+      this.sponsoredObserver = null;
+    }
   }
 
   isHomepage() {
     const url = window.location.href;
     const pathname = window.location.pathname;
-    
+
     // LinkedIn homepage/feed patterns
     const isHomepage = (
       pathname === '/feed/' ||
@@ -27,18 +118,18 @@ class LinkedInBuddy {
       pathname.startsWith('/feed') ||
       url.includes('/feed/')
     );
-    
+
     // Debug logging (can be removed in production)
     if (window.location.hostname.includes('linkedin.com')) {
       console.log('LinkedIn Buddy - Auto-Expand Posts:', isHomepage ? 'ENABLED (Homepage)' : 'DISABLED (Not Homepage)', 'URL:', url);
     }
-    
+
     return isHomepage;
   }
 
   init() {
     if (this.isInitialized) return;
-    
+
     this.loadSettings();
     this.createChatToggleButton();
     this.createChatWidget();
@@ -54,25 +145,25 @@ class LinkedInBuddy {
       if (this.currentUrl !== window.location.href) {
         const previousUrl = this.currentUrl;
         this.currentUrl = window.location.href;
-        
+
         // Clean up previous page modifications if we're leaving the homepage
         if (previousUrl && previousUrl.includes('/feed/') && !this.isHomepage()) {
           this.cleanupAutoExpandModifications();
         }
-        
+
         // Reapply auto-expand setting when URL changes
         this.toggleAutoExpandPosts(this.settings.autoExpandPosts);
       }
     });
-    
+
     observer.observe(document.body, {
       childList: true,
       subtree: true
     });
-    
+
     this.currentUrl = window.location.href;
   }
-  
+
   cleanupAutoExpandModifications() {
     // Remove any inline styles that might have been applied
     const styledElements = document.querySelectorAll('[style*="display: none"]');
@@ -81,18 +172,19 @@ class LinkedInBuddy {
         element.style.display = '';
       }
     });
-    
+
     // Ensure the CSS class is removed
     document.body.classList.remove('linkedin-buddy-auto-expand');
   }
 
   loadSettings() {
-    chrome.storage.sync.get(['enhancedFeed', 'quickActions', 'chatAssistant', 'autoExpandPosts'], (result) => {
+    chrome.storage.sync.get(['enhancedFeed', 'quickActions', 'chatAssistant', 'autoExpandPosts', 'autoHideSponsored'], (result) => {
       this.settings = {
         enhancedFeed: result.enhancedFeed || false,
         quickActions: result.quickActions || false,
         chatAssistant: result.chatAssistant || false,
-        autoExpandPosts: result.autoExpandPosts !== undefined ? result.autoExpandPosts : true
+        autoExpandPosts: result.autoExpandPosts !== undefined ? result.autoExpandPosts : true,
+        autoHideSponsored: result.autoHideSponsored || false
       };
       this.applySettings();
     });
@@ -103,6 +195,7 @@ class LinkedInBuddy {
     this.toggleQuickActions(this.settings.quickActions);
     this.toggleChatAssistant(this.settings.chatAssistant);
     this.toggleAutoExpandPosts(this.settings.autoExpandPosts);
+    this.toggleAutoHideSponsored(this.settings.autoHideSponsored);
   }
 
   createChatToggleButton() {
@@ -117,11 +210,11 @@ class LinkedInBuddy {
       </svg>
     `;
     this.toggleButton.title = 'Open LinkedIn Buddy Chat';
-    
+
     this.toggleButton.addEventListener('click', () => {
       this.toggleChat();
     });
-    
+
     document.body.appendChild(this.toggleButton);
   }
 
@@ -143,21 +236,21 @@ class LinkedInBuddy {
         <button class="chat-send" id="chatSend">Send</button>
       </div>
     `;
-    
+
     document.body.appendChild(this.chatWidget);
-    
+
     // Add event listeners
     this.chatWidget.querySelector('.chat-close').addEventListener('click', () => {
       this.toggleChat();
     });
-    
+
     const chatInput = this.chatWidget.querySelector('#chatInput');
     const chatSend = this.chatWidget.querySelector('#chatSend');
-    
+
     chatSend.addEventListener('click', () => {
       this.sendMessage();
     });
-    
+
     chatInput.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') {
         this.sendMessage();
@@ -174,9 +267,9 @@ class LinkedInBuddy {
       <button class="quick-action-btn" data-action="hideSponsored">Hide Sponsored Posts</button>
       <button class="quick-action-btn" data-action="enhanceSearch">Enhance Search</button>
     `;
-    
+
     document.body.appendChild(this.quickActions);
-    
+
     // Add event listeners for quick actions
     this.quickActions.addEventListener('click', (e) => {
       if (e.target.classList.contains('quick-action-btn')) {
@@ -203,8 +296,19 @@ class LinkedInBuddy {
         case 'toggleAutoExpandPosts':
           this.toggleAutoExpandPosts(message.enabled);
           break;
+        case 'toggleAutoHideSponsored':
+          this.toggleAutoHideSponsored(message.enabled);
+          break;
       }
     });
+  }
+
+  toggleAutoHideSponsored(enabled) {
+    if (enabled) {
+      this.startAutoHideSponsored();
+    } else {
+      this.stopAutoHideSponsored();
+    }
   }
 
   toggleChat() {
@@ -225,12 +329,12 @@ class LinkedInBuddy {
   sendMessage() {
     const input = this.chatWidget.querySelector('#chatInput');
     const message = input.value.trim();
-    
+
     if (!message) return;
-    
+
     this.addMessageToChat(message, 'user');
     input.value = '';
-    
+
     // Simulate assistant response
     setTimeout(() => {
       this.handleUserMessage(message);
@@ -249,7 +353,7 @@ class LinkedInBuddy {
   handleUserMessage(message) {
     const lowerMessage = message.toLowerCase();
     let response = '';
-    
+
     if (lowerMessage.includes('profile') || lowerMessage.includes('url')) {
       response = 'I can help you copy your profile URL or analyze profile information. Try using the Quick Actions menu!';
     } else if (lowerMessage.includes('connection') || lowerMessage.includes('network')) {
@@ -261,7 +365,7 @@ class LinkedInBuddy {
     } else {
       response = 'I can help you with various LinkedIn tasks like managing connections, analyzing profiles, enhancing your feed, and more. What would you like to do?';
     }
-    
+
     this.addMessageToChat(response, 'assistant');
   }
 
@@ -290,7 +394,7 @@ class LinkedInBuddy {
         });
       });
     });
-    
+
     observer.observe(document.body, {
       childList: true,
       subtree: true
@@ -326,6 +430,8 @@ class LinkedInBuddy {
         break;
       case 'hideSponsored':
         this.hideSponsoredPosts();
+        // Also enable auto-hide for convenience
+        this.toggleAutoHideSponsored(true);
         break;
       case 'enhanceSearch':
         this.showNotification('Search enhancement feature coming soon!');
@@ -334,11 +440,60 @@ class LinkedInBuddy {
   }
 
   hideSponsoredPosts() {
-    const sponsoredPosts = document.querySelectorAll('[data-id*="urn:li:sponsoredUpdate"], [aria-label*="Promoted"], [aria-label*="Sponsored"]');
-    sponsoredPosts.forEach(post => {
-      post.style.display = 'none';
+    let hiddenCount = 0;
+
+    // Find all feed posts
+    const feedPosts = document.querySelectorAll('.feed-shared-update-v2');
+    console.log(`LinkedIn Buddy: Found ${feedPosts.length} feed posts to check`);
+
+    feedPosts.forEach((post, index) => {
+      // Check if post has the dismiss/hide button - if not, it's likely a sponsored post
+      const hideButton = post.querySelector('.feed-shared-control-menu__hide-post-button');
+
+      if (!hideButton && post.style.display !== 'none') {
+        // Double-check with some additional indicators to be sure
+        const hasPromotedText = post.textContent.includes('Promoted by') ||
+          post.textContent.includes('Sponsored by') ||
+          post.textContent.includes('Promoted') ||
+          post.textContent.includes('Sponsored');
+
+        const hasFollowButton = post.querySelector('.update-components-actor__follow-button');
+
+        // If no hide button AND (has promoted text OR has follow button), it's likely sponsored
+        if (hasPromotedText || hasFollowButton) {
+          post.style.display = 'none';
+          hiddenCount++;
+          console.log('LinkedIn Buddy: Hidden sponsored post (no dismiss button - manual)', {
+            post: post,
+            hasPromotedText: hasPromotedText,
+            hasFollowButton: !!hasFollowButton,
+            promotedText: hasPromotedText ? post.textContent.match(/(Promoted by|Sponsored by)[^.]*/) : null
+          });
+        }
+      }
     });
-    this.showNotification(`Hidden ${sponsoredPosts.length} sponsored posts`);
+
+    // Also check for explicit sponsored selectors as backup
+    const sponsoredSelectors = [
+      '[data-id*="urn:li:sponsoredUpdate"]',
+      '[aria-label*="Promoted"]',
+      '[aria-label*="Sponsored"]',
+      '[data-test-id*="sponsored"]'
+    ];
+
+    sponsoredSelectors.forEach(selector => {
+      const sponsoredPosts = document.querySelectorAll(selector);
+      sponsoredPosts.forEach(post => {
+        const postContainer = post.closest('.feed-shared-update-v2') || post.closest('[data-id^="urn:li:activity"]') || post;
+        if (postContainer && postContainer.style.display !== 'none') {
+          postContainer.style.display = 'none';
+          hiddenCount++;
+          console.log('LinkedIn Buddy: Hidden sponsored post (selector match - manual)', selector, postContainer);
+        }
+      });
+    });
+
+    this.showNotification(`Hidden ${hiddenCount} sponsored posts`);
   }
 
   toggleAutoExpandPosts(enabled) {
@@ -358,14 +513,14 @@ class LinkedInBuddy {
     if (!this.isHomepage()) {
       return;
     }
-    
+
     // Find all "see more" buttons ONLY in main post content, not in comments
     const seeMoreButtons = document.querySelectorAll(`
       .feed-shared-update-v2__description .feed-shared-inline-show-more-text:not(.feed-shared-inline-show-more-text--expanded),
       .feed-shared-update-v2__description .feed-shared-inline-show-more-text--minimal-padding:not(.feed-shared-inline-show-more-text--expanded),
       .feed-shared-update-v2__description .feed-shared-inline-show-more-text--3-lines:not(.feed-shared-inline-show-more-text--expanded)
     `);
-    
+
     seeMoreButtons.forEach(button => {
       // Trigger a hover event to potentially load the content
       const hoverEvent = new MouseEvent('mouseenter', {
@@ -382,20 +537,20 @@ class LinkedInBuddy {
     if (!this.isHomepage()) {
       return;
     }
-    
+
     // Remove existing ellipsis spans ONLY from main post content, not comments
     const ellipsisSpans = document.querySelectorAll(`
       .feed-shared-update-v2__description .feed-shared-text span[aria-hidden="true"],
       .feed-shared-update-v2__description span[aria-hidden="true"]
     `);
-    
+
     ellipsisSpans.forEach(span => {
       const text = span.textContent;
       if (text.includes('…') || text.includes('...') || text.includes('more')) {
         span.remove();
       }
     });
-    
+
     // Also hide any "more" buttons that might still be visible
     this.hideMoreButtons();
   }
@@ -405,7 +560,7 @@ class LinkedInBuddy {
     if (!this.isHomepage()) {
       return;
     }
-    
+
     // Find only the specific "more" buttons in main post content, not in comments
     const moreSelectors = [
       '.feed-shared-update-v2__description .feed-shared-inline-show-more-text',
@@ -415,7 +570,7 @@ class LinkedInBuddy {
       '.feed-shared-update-v2__description .feed-shared-inline-show-more-text__dynamic-more-text',
       '.feed-shared-update-v2__description .feed-shared-inline-show-more-text__dynamic-bidi-text'
     ];
-    
+
     moreSelectors.forEach(selector => {
       const elements = document.querySelectorAll(selector);
       elements.forEach(element => {
@@ -428,13 +583,13 @@ class LinkedInBuddy {
     if (this.autoExpandObserver) {
       this.autoExpandObserver.disconnect();
     }
-    
+
     this.autoExpandObserver = new MutationObserver((mutations) => {
       // Only process mutations if we're on the homepage
       if (!this.isHomepage()) {
         return;
       }
-      
+
       mutations.forEach((mutation) => {
         mutation.addedNodes.forEach((node) => {
           if (node.nodeType === 1) { // Element node
@@ -444,7 +599,7 @@ class LinkedInBuddy {
               .feed-shared-update-v2__description .feed-shared-inline-show-more-text--minimal-padding:not(.feed-shared-inline-show-more-text--expanded),
               .feed-shared-update-v2__description .feed-shared-inline-show-more-text--3-lines:not(.feed-shared-inline-show-more-text--expanded)
             `);
-            
+
             if (newSeeMoreButtons) {
               newSeeMoreButtons.forEach(button => {
                 const hoverEvent = new MouseEvent('mouseenter', {
@@ -455,14 +610,14 @@ class LinkedInBuddy {
                 button.dispatchEvent(hoverEvent);
               });
             }
-            
+
             // Remove ellipsis spans from new content
             this.removeEllipsisSpans();
           }
         });
       });
     });
-    
+
     this.autoExpandObserver.observe(document.body, {
       childList: true,
       subtree: true
@@ -491,9 +646,9 @@ class LinkedInBuddy {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
     `;
-    
+
     document.body.appendChild(notification);
-    
+
     setTimeout(() => {
       notification.remove();
     }, 3000);
