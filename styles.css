@@ -304,30 +304,29 @@
   background: #e8e6e3;
 }
 
-/* Auto-Expand Posts CSS */
-.linkedin-buddy-auto-expand .feed-shared-inline-show-more-text,
-.linkedin-buddy-auto-expand .feed-shared-inline-show-more-text--minimal-padding,
-.linkedin-buddy-auto-expand .feed-shared-inline-show-more-text--3-lines,
-.linkedin-buddy-auto-expand .feed-shared-inline-show-more-text__see-more-less-toggle,
-.linkedin-buddy-auto-expand .see-more,
-.linkedin-buddy-auto-expand .feed-shared-inline-show-more-text__dynamic-more-text,
-.linkedin-buddy-auto-expand .feed-shared-inline-show-more-text__dynamic-bidi-text {
+/* Auto-Expand Posts CSS - Only target main post content, not comments */
+.linkedin-buddy-auto-expand .feed-shared-update-v2__description .feed-shared-inline-show-more-text,
+.linkedin-buddy-auto-expand .feed-shared-update-v2__description .feed-shared-inline-show-more-text--minimal-padding,
+.linkedin-buddy-auto-expand .feed-shared-update-v2__description .feed-shared-inline-show-more-text--3-lines,
+.linkedin-buddy-auto-expand .feed-shared-update-v2__description .feed-shared-inline-show-more-text__see-more-less-toggle,
+.linkedin-buddy-auto-expand .feed-shared-update-v2__description .feed-shared-inline-show-more-text__dynamic-more-text,
+.linkedin-buddy-auto-expand .feed-shared-update-v2__description .feed-shared-inline-show-more-text__dynamic-bidi-text {
   display: none !important;
 }
 
-/* Hide ellipsis spans within feed content */
-.linkedin-buddy-auto-expand .feed-shared-text span[aria-hidden="true"],
+/* Hide ellipsis spans within main post content only */
+.linkedin-buddy-auto-expand .feed-shared-update-v2__description .feed-shared-text span[aria-hidden="true"],
 .linkedin-buddy-auto-expand .feed-shared-update-v2__description span[aria-hidden="true"] {
   display: none !important;
 }
 
-/* Show the full text content when auto-expand is enabled */
+/* Show the full text content when auto-expand is enabled - main post content only */
 .linkedin-buddy-auto-expand .feed-shared-update-v2__description-wrapper,
 .linkedin-buddy-auto-expand .feed-shared-update-v2__description,
-.linkedin-buddy-auto-expand .feed-shared-text,
-.linkedin-buddy-auto-expand .feed-shared-text--minimal-padding,
-.linkedin-buddy-auto-expand .feed-shared-text__text-view,
-.linkedin-buddy-auto-expand .feed-shared-text__text-view--minimal-padding {
+.linkedin-buddy-auto-expand .feed-shared-update-v2__description .feed-shared-text,
+.linkedin-buddy-auto-expand .feed-shared-update-v2__description .feed-shared-text--minimal-padding,
+.linkedin-buddy-auto-expand .feed-shared-update-v2__description .feed-shared-text__text-view,
+.linkedin-buddy-auto-expand .feed-shared-update-v2__description .feed-shared-text__text-view--minimal-padding {
   max-height: none !important;
   display: block !important;
   overflow: visible !important;
@@ -336,18 +335,18 @@
   white-space: normal !important;
 }
 
-/* Hide the gradient overlay that creates the fade effect */
+/* Hide the gradient overlay that creates the fade effect - main post content only */
 .linkedin-buddy-auto-expand .feed-shared-update-v2__description::after,
 .linkedin-buddy-auto-expand .feed-shared-update-v2__description-wrapper::after,
-.linkedin-buddy-auto-expand .feed-shared-text::after,
-.linkedin-buddy-auto-expand .feed-shared-text--minimal-padding::after,
-.linkedin-buddy-auto-expand .feed-shared-text__text-view::after,
-.linkedin-buddy-auto-expand .feed-shared-text__text-view--minimal-padding::after {
+.linkedin-buddy-auto-expand .feed-shared-update-v2__description .feed-shared-text::after,
+.linkedin-buddy-auto-expand .feed-shared-update-v2__description .feed-shared-text--minimal-padding::after,
+.linkedin-buddy-auto-expand .feed-shared-update-v2__description .feed-shared-text__text-view::after,
+.linkedin-buddy-auto-expand .feed-shared-update-v2__description .feed-shared-text__text-view--minimal-padding::after {
   display: none !important;
 }
 
-/* Remove text truncation from spans and divs */
-.linkedin-buddy-auto-expand .feed-shared-text span,
+/* Remove text truncation from spans and divs - main post content only */
+.linkedin-buddy-auto-expand .feed-shared-update-v2__description .feed-shared-text span,
 .linkedin-buddy-auto-expand .feed-shared-update-v2__description span {
   max-height: none !important;
   display: inline !important;
@@ -358,7 +357,7 @@
   white-space: normal !important;
 }
 
-.linkedin-buddy-auto-expand .feed-shared-text div,
+.linkedin-buddy-auto-expand .feed-shared-update-v2__description .feed-shared-text div,
 .linkedin-buddy-auto-expand .feed-shared-update-v2__description div {
   max-height: none !important;
   display: block !important;
@@ -369,9 +368,9 @@
   white-space: normal !important;
 }
 
-/* Remove height restrictions from containing elements */
-.linkedin-buddy-auto-expand .feed-shared-text[dir="ltr"],
-.linkedin-buddy-auto-expand .feed-shared-text[dir="rtl"] {
+/* Remove height restrictions from containing elements - main post content only */
+.linkedin-buddy-auto-expand .feed-shared-update-v2__description .feed-shared-text[dir="ltr"],
+.linkedin-buddy-auto-expand .feed-shared-update-v2__description .feed-shared-text[dir="rtl"] {
   max-height: none !important;
   display: block !important;
   overflow: visible !important;

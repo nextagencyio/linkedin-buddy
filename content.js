@@ -16,6 +16,26 @@ class LinkedInBuddy {
     this.init();
   }
 
+  isHomepage() {
+    const url = window.location.href;
+    const pathname = window.location.pathname;
+    
+    // LinkedIn homepage/feed patterns
+    const isHomepage = (
+      pathname === '/feed/' ||
+      pathname === '/' ||
+      pathname.startsWith('/feed') ||
+      url.includes('/feed/')
+    );
+    
+    // Debug logging (can be removed in production)
+    if (window.location.hostname.includes('linkedin.com')) {
+      console.log('LinkedIn Buddy - Auto-Expand Posts:', isHomepage ? 'ENABLED (Homepage)' : 'DISABLED (Not Homepage)', 'URL:', url);
+    }
+    
+    return isHomepage;
+  }
+
   init() {
     if (this.isInitialized) return;
     
@@ -24,7 +44,46 @@ class LinkedInBuddy {
     this.createChatWidget();
     this.createQuickActions();
     this.setupMessageListener();
+    this.setupUrlChangeListener();
     this.isInitialized = true;
+  }
+
+  setupUrlChangeListener() {
+    // Listen for URL changes in SPA navigation
+    const observer = new MutationObserver(() => {
+      if (this.currentUrl !== window.location.href) {
+        const previousUrl = this.currentUrl;
+        this.currentUrl = window.location.href;
+        
+        // Clean up previous page modifications if we're leaving the homepage
+        if (previousUrl && previousUrl.includes('/feed/') && !this.isHomepage()) {
+          this.cleanupAutoExpandModifications();
+        }
+        
+        // Reapply auto-expand setting when URL changes
+        this.toggleAutoExpandPosts(this.settings.autoExpandPosts);
+      }
+    });
+    
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+    
+    this.currentUrl = window.location.href;
+  }
+  
+  cleanupAutoExpandModifications() {
+    // Remove any inline styles that might have been applied
+    const styledElements = document.querySelectorAll('[style*="display: none"]');
+    styledElements.forEach(element => {
+      if (element.style.display === 'none') {
+        element.style.display = '';
+      }
+    });
+    
+    // Ensure the CSS class is removed
+    document.body.classList.remove('linkedin-buddy-auto-expand');
   }
 
   loadSettings() {
@@ -283,7 +342,7 @@ class LinkedInBuddy {
   }
 
   toggleAutoExpandPosts(enabled) {
-    if (enabled) {
+    if (enabled && this.isHomepage()) {
       document.body.classList.add('linkedin-buddy-auto-expand');
       this.triggerContentLoad();
       this.removeEllipsisSpans();
@@ -295,11 +354,16 @@ class LinkedInBuddy {
   }
 
   triggerContentLoad() {
-    // Find all "see more" buttons and trigger their content to load
+    // Only trigger content load if we're on the homepage
+    if (!this.isHomepage()) {
+      return;
+    }
+    
+    // Find all "see more" buttons ONLY in main post content, not in comments
     const seeMoreButtons = document.querySelectorAll(`
-      .feed-shared-inline-show-more-text:not(.feed-shared-inline-show-more-text--expanded),
-      .feed-shared-inline-show-more-text--minimal-padding:not(.feed-shared-inline-show-more-text--expanded),
-      .feed-shared-inline-show-more-text--3-lines:not(.feed-shared-inline-show-more-text--expanded)
+      .feed-shared-update-v2__description .feed-shared-inline-show-more-text:not(.feed-shared-inline-show-more-text--expanded),
+      .feed-shared-update-v2__description .feed-shared-inline-show-more-text--minimal-padding:not(.feed-shared-inline-show-more-text--expanded),
+      .feed-shared-update-v2__description .feed-shared-inline-show-more-text--3-lines:not(.feed-shared-inline-show-more-text--expanded)
     `);
     
     seeMoreButtons.forEach(button => {
@@ -314,11 +378,15 @@ class LinkedInBuddy {
   }
 
   removeEllipsisSpans() {
-    // Remove existing ellipsis spans
+    // Only remove ellipsis spans if we're on the homepage
+    if (!this.isHomepage()) {
+      return;
+    }
+    
+    // Remove existing ellipsis spans ONLY from main post content, not comments
     const ellipsisSpans = document.querySelectorAll(`
-      .feed-shared-text span[aria-hidden="true"],
-      .feed-shared-update-v2__description span[aria-hidden="true"],
-      span[aria-hidden="true"]
+      .feed-shared-update-v2__description .feed-shared-text span[aria-hidden="true"],
+      .feed-shared-update-v2__description span[aria-hidden="true"]
     `);
     
     ellipsisSpans.forEach(span => {
@@ -333,15 +401,19 @@ class LinkedInBuddy {
   }
 
   hideMoreButtons() {
-    // Find only the specific "more" buttons in feed posts
+    // Only hide buttons if we're on the homepage
+    if (!this.isHomepage()) {
+      return;
+    }
+    
+    // Find only the specific "more" buttons in main post content, not in comments
     const moreSelectors = [
-      '.feed-shared-inline-show-more-text',
-      '.feed-shared-inline-show-more-text--minimal-padding',
-      '.feed-shared-inline-show-more-text--3-lines',
-      '.feed-shared-inline-show-more-text__see-more-less-toggle',
-      '.see-more',
-      '.feed-shared-inline-show-more-text__dynamic-more-text',
-      '.feed-shared-inline-show-more-text__dynamic-bidi-text'
+      '.feed-shared-update-v2__description .feed-shared-inline-show-more-text',
+      '.feed-shared-update-v2__description .feed-shared-inline-show-more-text--minimal-padding',
+      '.feed-shared-update-v2__description .feed-shared-inline-show-more-text--3-lines',
+      '.feed-shared-update-v2__description .feed-shared-inline-show-more-text__see-more-less-toggle',
+      '.feed-shared-update-v2__description .feed-shared-inline-show-more-text__dynamic-more-text',
+      '.feed-shared-update-v2__description .feed-shared-inline-show-more-text__dynamic-bidi-text'
     ];
     
     moreSelectors.forEach(selector => {
@@ -358,14 +430,19 @@ class LinkedInBuddy {
     }
     
     this.autoExpandObserver = new MutationObserver((mutations) => {
+      // Only process mutations if we're on the homepage
+      if (!this.isHomepage()) {
+        return;
+      }
+      
       mutations.forEach((mutation) => {
         mutation.addedNodes.forEach((node) => {
           if (node.nodeType === 1) { // Element node
-            // Trigger content load for any new "see more" buttons
+            // Trigger content load for any new "see more" buttons ONLY in main post content
             const newSeeMoreButtons = node.querySelectorAll && node.querySelectorAll(`
-              .feed-shared-inline-show-more-text:not(.feed-shared-inline-show-more-text--expanded),
-              .feed-shared-inline-show-more-text--minimal-padding:not(.feed-shared-inline-show-more-text--expanded),
-              .feed-shared-inline-show-more-text--3-lines:not(.feed-shared-inline-show-more-text--expanded)
+              .feed-shared-update-v2__description .feed-shared-inline-show-more-text:not(.feed-shared-inline-show-more-text--expanded),
+              .feed-shared-update-v2__description .feed-shared-inline-show-more-text--minimal-padding:not(.feed-shared-inline-show-more-text--expanded),
+              .feed-shared-update-v2__description .feed-shared-inline-show-more-text--3-lines:not(.feed-shared-inline-show-more-text--expanded)
             `);
             
             if (newSeeMoreButtons) {
