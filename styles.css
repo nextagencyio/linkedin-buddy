@@ -4,137 +4,261 @@
 .linkedin-buddy-chat {
   position: fixed;
   bottom: 20px;
-  right: 20px;
-  width: 350px;
-  height: 450px;
+  left: 20px;
+  width: 380px;
+  height: 500px;
   background: white;
-  border-radius: 10px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
   z-index: 10000;
   display: none;
   flex-direction: column;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  backdrop-filter: blur(10px);
 }
 
 .linkedin-buddy-chat.visible {
   display: flex;
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 .chat-header {
-  background: #0077b5;
+  background: linear-gradient(135deg, #0077b5 0%, #005885 100%);
   color: white;
-  padding: 15px;
-  border-radius: 10px 10px 0 0;
+  padding: 20px;
+  border-radius: 16px 16px 0 0;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  box-shadow: 0 2px 8px rgba(0, 119, 181, 0.15);
 }
 
 .chat-header h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: 18px;
+  font-weight: 600;
+  color: white !important;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-header h3::before {
+  content: "🤖";
+  font-size: 20px;
 }
 
 .chat-close {
-  background: none;
+  background: rgba(255, 255, 255, 0.1);
   border: none;
   color: white;
-  font-size: 18px;
+  font-size: 16px;
   cursor: pointer;
-  padding: 0;
-  width: 20px;
-  height: 20px;
+  padding: 6px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.chat-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.1);
 }
 
 .chat-messages {
   flex: 1;
-  padding: 15px;
+  padding: 20px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+  background: #fafafa;
+}
+
+.chat-messages::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-messages::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+  background: #ddd;
+  border-radius: 3px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb:hover {
+  background: #bbb;
 }
 
 .chat-message {
-  padding: 10px;
-  border-radius: 8px;
-  max-width: 80%;
+  padding: 12px 16px;
+  border-radius: 18px;
+  max-width: 85%;
+  font-size: 14px;
+  line-height: 1.4;
+  position: relative;
+  animation: messageSlide 0.3s ease-out;
+}
+
+@keyframes messageSlide {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 .chat-message.user {
-  background: #e3f2fd;
+  background: linear-gradient(135deg, #0077b5 0%, #005885 100%);
+  color: white;
   align-self: flex-end;
   margin-left: auto;
+  border-bottom-right-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 119, 181, 0.2);
 }
 
 .chat-message.assistant {
-  background: #f5f5f5;
+  background: white;
+  color: #333;
   align-self: flex-start;
+  border-bottom-left-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .chat-input-area {
-  padding: 15px;
+  padding: 20px;
+  background: white;
   border-top: 1px solid #eee;
   display: flex;
-  gap: 10px;
+  gap: 12px;
+  border-radius: 0 0 16px 16px;
 }
 
 .chat-input {
   flex: 1;
-  padding: 10px;
-  border: 1px solid #ddd;
-  border-radius: 5px;
+  padding: 12px 16px;
+  border: 2px solid #eee;
+  border-radius: 24px;
   outline: none;
   font-family: inherit;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  background: #f8f9fa;
+}
+
+.chat-input:focus {
+  border-color: #0077b5;
+  background: white;
+  box-shadow: 0 0 0 3px rgba(0, 119, 181, 0.1);
 }
 
 .chat-send {
-  background: #0077b5;
+  background: linear-gradient(135deg, #0077b5 0%, #005885 100%);
   color: white;
   border: none;
-  padding: 10px 15px;
-  border-radius: 5px;
+  padding: 12px 20px;
+  border-radius: 24px;
   cursor: pointer;
-  font-weight: bold;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 119, 181, 0.2);
 }
 
 .chat-send:hover {
-  background: #005885;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 119, 181, 0.3);
+}
+
+.chat-send:active {
+  transform: translateY(0);
 }
 
 .chat-send:disabled {
   background: #ccc;
   cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 /* Chat Toggle Button */
 .linkedin-buddy-toggle {
   position: fixed;
   bottom: 20px;
-  right: 20px;
-  width: 60px;
-  height: 60px;
-  background: #0077b5;
+  left: 20px;
+  width: 56px;
+  height: 56px;
+  background: linear-gradient(135deg, #0077b5 0%, #005885 100%);
   color: white;
   border: none;
   border-radius: 50%;
   cursor: pointer;
-  font-size: 24px;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 6px 20px rgba(0, 119, 181, 0.3), 0 2px 8px rgba(0, 0, 0, 0.1);
   z-index: 9999;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.3s ease;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.linkedin-buddy-toggle svg {
+  width: 24px;
+  height: 24px;
+  color: white;
 }
 
 .linkedin-buddy-toggle:hover {
-  background: #005885;
-  transform: scale(1.1);
+  transform: scale(1.08) translateY(-2px);
+  box-shadow: 0 8px 28px rgba(0, 119, 181, 0.4), 0 4px 12px rgba(0, 0, 0, 0.15);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.linkedin-buddy-toggle:active {
+  transform: scale(1.02) translateY(0);
 }
 
 .linkedin-buddy-toggle.hidden {
   display: none;
+}
+
+/* Add a subtle pulse animation to make it more noticeable */
+@keyframes pulse {
+  0% {
+    box-shadow: 0 6px 20px rgba(0, 119, 181, 0.3), 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+  50% {
+    box-shadow: 0 8px 28px rgba(0, 119, 181, 0.4), 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+  100% {
+    box-shadow: 0 6px 20px rgba(0, 119, 181, 0.3), 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+}
+
+.linkedin-buddy-toggle:not(:hover) {
+  animation: pulse 3s ease-in-out infinite;
 }
 
 /* Enhanced Feed Styles */
@@ -183,7 +307,17 @@
 /* Auto-Expand Posts CSS */
 .linkedin-buddy-auto-expand .feed-shared-inline-show-more-text,
 .linkedin-buddy-auto-expand .feed-shared-inline-show-more-text--minimal-padding,
-.linkedin-buddy-auto-expand .feed-shared-inline-show-more-text--3-lines {
+.linkedin-buddy-auto-expand .feed-shared-inline-show-more-text--3-lines,
+.linkedin-buddy-auto-expand .feed-shared-inline-show-more-text__see-more-less-toggle,
+.linkedin-buddy-auto-expand .see-more,
+.linkedin-buddy-auto-expand .feed-shared-inline-show-more-text__dynamic-more-text,
+.linkedin-buddy-auto-expand .feed-shared-inline-show-more-text__dynamic-bidi-text {
+  display: none !important;
+}
+
+/* Hide ellipsis spans within feed content */
+.linkedin-buddy-auto-expand .feed-shared-text span[aria-hidden="true"],
+.linkedin-buddy-auto-expand .feed-shared-update-v2__description span[aria-hidden="true"] {
   display: none !important;
 }
 

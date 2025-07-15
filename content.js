@@ -49,7 +49,14 @@ class LinkedInBuddy {
   createChatToggleButton() {
     this.toggleButton = document.createElement('button');
     this.toggleButton.className = 'linkedin-buddy-toggle';
-    this.toggleButton.innerHTML = '💬';
+    this.toggleButton.innerHTML = `
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2C6.48 2 2 6.48 2 12c0 1.54.36 2.98.97 4.29L1 23l6.71-1.97C9.02 21.64 10.46 22 12 22c5.52 0 10-4.48 10-10S17.52 2 12 2z" fill="currentColor"/>
+        <circle cx="8.5" cy="12" r="1.5" fill="white"/>
+        <circle cx="12" cy="12" r="1.5" fill="white"/>
+        <circle cx="15.5" cy="12" r="1.5" fill="white"/>
+      </svg>
+    `;
     this.toggleButton.title = 'Open LinkedIn Buddy Chat';
     
     this.toggleButton.addEventListener('click', () => {
@@ -279,6 +286,7 @@ class LinkedInBuddy {
     if (enabled) {
       document.body.classList.add('linkedin-buddy-auto-expand');
       this.triggerContentLoad();
+      this.removeEllipsisSpans();
       this.startObservingForNewPosts();
     } else {
       document.body.classList.remove('linkedin-buddy-auto-expand');
@@ -302,6 +310,45 @@ class LinkedInBuddy {
         view: window
       });
       button.dispatchEvent(hoverEvent);
+    });
+  }
+
+  removeEllipsisSpans() {
+    // Remove existing ellipsis spans
+    const ellipsisSpans = document.querySelectorAll(`
+      .feed-shared-text span[aria-hidden="true"],
+      .feed-shared-update-v2__description span[aria-hidden="true"],
+      span[aria-hidden="true"]
+    `);
+    
+    ellipsisSpans.forEach(span => {
+      const text = span.textContent;
+      if (text.includes('…') || text.includes('...') || text.includes('more')) {
+        span.remove();
+      }
+    });
+    
+    // Also hide any "more" buttons that might still be visible
+    this.hideMoreButtons();
+  }
+
+  hideMoreButtons() {
+    // Find only the specific "more" buttons in feed posts
+    const moreSelectors = [
+      '.feed-shared-inline-show-more-text',
+      '.feed-shared-inline-show-more-text--minimal-padding',
+      '.feed-shared-inline-show-more-text--3-lines',
+      '.feed-shared-inline-show-more-text__see-more-less-toggle',
+      '.see-more',
+      '.feed-shared-inline-show-more-text__dynamic-more-text',
+      '.feed-shared-inline-show-more-text__dynamic-bidi-text'
+    ];
+    
+    moreSelectors.forEach(selector => {
+      const elements = document.querySelectorAll(selector);
+      elements.forEach(element => {
+        element.style.display = 'none';
+      });
     });
   }
 
@@ -331,6 +378,9 @@ class LinkedInBuddy {
                 button.dispatchEvent(hoverEvent);
               });
             }
+            
+            // Remove ellipsis spans from new content
+            this.removeEllipsisSpans();
           }
         });
       });
