@@ -2,14 +2,16 @@ document.addEventListener('DOMContentLoaded', function() {
   const enhancedFeedToggle = document.getElementById('enhancedFeed');
   const quickActionsToggle = document.getElementById('quickActions');
   const autoExpandPostsToggle = document.getElementById('autoExpandPosts');
+  const hideSponsoredToggle = document.getElementById('hideSponsored');
   const chatAssistantToggle = document.getElementById('chatAssistant');
   const openChatButton = document.getElementById('openChat');
 
   // Load saved settings
-  chrome.storage.sync.get(['enhancedFeed', 'quickActions', 'autoExpandPosts', 'chatAssistant'], function(result) {
+  chrome.storage.sync.get(['enhancedFeed', 'quickActions', 'autoExpandPosts', 'hideSponsored', 'chatAssistant'], function(result) {
     enhancedFeedToggle.checked = result.enhancedFeed || false;
     quickActionsToggle.checked = result.quickActions || false;
-    autoExpandPostsToggle.checked = result.autoExpandPosts !== undefined ? result.autoExpandPosts : true;
+    autoExpandPostsToggle.checked = result.autoExpandPosts !== undefined ? result.autoExpandPosts : false;
+    hideSponsoredToggle.checked = result.hideSponsored !== undefined ? result.hideSponsored : false;
     chatAssistantToggle.checked = result.chatAssistant || false;
   });
 
@@ -27,6 +29,11 @@ document.addEventListener('DOMContentLoaded', function() {
   autoExpandPostsToggle.addEventListener('change', function() {
     chrome.storage.sync.set({autoExpandPosts: this.checked});
     sendMessageToContentScript({action: 'toggleAutoExpandPosts', enabled: this.checked});
+  });
+
+  hideSponsoredToggle.addEventListener('change', function() {
+    chrome.storage.sync.set({hideSponsored: this.checked});
+    sendMessageToContentScript({action: 'toggleHideSponsored', enabled: this.checked});
   });
 
   chatAssistantToggle.addEventListener('change', function() {
