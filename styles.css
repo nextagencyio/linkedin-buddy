@@ -1,0 +1,244 @@
+/* LinkedIn Buddy Styles */
+
+/* Chat Widget Styles */
+.linkedin-buddy-chat {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 350px;
+  height: 450px;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  z-index: 10000;
+  display: none;
+  flex-direction: column;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.linkedin-buddy-chat.visible {
+  display: flex;
+}
+
+.chat-header {
+  background: #0077b5;
+  color: white;
+  padding: 15px;
+  border-radius: 10px 10px 0 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.chat-header h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.chat-close {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0;
+  width: 20px;
+  height: 20px;
+}
+
+.chat-messages {
+  flex: 1;
+  padding: 15px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chat-message {
+  padding: 10px;
+  border-radius: 8px;
+  max-width: 80%;
+}
+
+.chat-message.user {
+  background: #e3f2fd;
+  align-self: flex-end;
+  margin-left: auto;
+}
+
+.chat-message.assistant {
+  background: #f5f5f5;
+  align-self: flex-start;
+}
+
+.chat-input-area {
+  padding: 15px;
+  border-top: 1px solid #eee;
+  display: flex;
+  gap: 10px;
+}
+
+.chat-input {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  outline: none;
+  font-family: inherit;
+}
+
+.chat-send {
+  background: #0077b5;
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.chat-send:hover {
+  background: #005885;
+}
+
+.chat-send:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+/* Chat Toggle Button */
+.linkedin-buddy-toggle {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 60px;
+  height: 60px;
+  background: #0077b5;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 24px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.linkedin-buddy-toggle:hover {
+  background: #005885;
+  transform: scale(1.1);
+}
+
+.linkedin-buddy-toggle.hidden {
+  display: none;
+}
+
+/* Enhanced Feed Styles */
+.linkedin-buddy-enhanced .feed-item {
+  border-left: 3px solid #0077b5 !important;
+}
+
+.linkedin-buddy-enhanced .feed-item:hover {
+  background-color: #f8f9fa !important;
+}
+
+/* Quick Actions Styles */
+.linkedin-buddy-quick-actions {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  padding: 10px;
+  z-index: 9998;
+  display: none;
+}
+
+.linkedin-buddy-quick-actions.visible {
+  display: block;
+}
+
+.quick-action-btn {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  margin: 5px 0;
+  background: #f3f2ef;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+
+.quick-action-btn:hover {
+  background: #e8e6e3;
+}
+
+/* Auto-Expand Posts CSS */
+.linkedin-buddy-auto-expand .feed-shared-inline-show-more-text,
+.linkedin-buddy-auto-expand .feed-shared-inline-show-more-text--minimal-padding,
+.linkedin-buddy-auto-expand .feed-shared-inline-show-more-text--3-lines {
+  display: none !important;
+}
+
+/* Show the full text content when auto-expand is enabled */
+.linkedin-buddy-auto-expand .feed-shared-update-v2__description-wrapper,
+.linkedin-buddy-auto-expand .feed-shared-update-v2__description,
+.linkedin-buddy-auto-expand .feed-shared-text,
+.linkedin-buddy-auto-expand .feed-shared-text--minimal-padding,
+.linkedin-buddy-auto-expand .feed-shared-text__text-view,
+.linkedin-buddy-auto-expand .feed-shared-text__text-view--minimal-padding {
+  max-height: none !important;
+  display: block !important;
+  overflow: visible !important;
+  -webkit-line-clamp: unset !important;
+  line-clamp: unset !important;
+  white-space: normal !important;
+}
+
+/* Hide the gradient overlay that creates the fade effect */
+.linkedin-buddy-auto-expand .feed-shared-update-v2__description::after,
+.linkedin-buddy-auto-expand .feed-shared-update-v2__description-wrapper::after,
+.linkedin-buddy-auto-expand .feed-shared-text::after,
+.linkedin-buddy-auto-expand .feed-shared-text--minimal-padding::after,
+.linkedin-buddy-auto-expand .feed-shared-text__text-view::after,
+.linkedin-buddy-auto-expand .feed-shared-text__text-view--minimal-padding::after {
+  display: none !important;
+}
+
+/* Remove text truncation from spans and divs */
+.linkedin-buddy-auto-expand .feed-shared-text span,
+.linkedin-buddy-auto-expand .feed-shared-update-v2__description span {
+  max-height: none !important;
+  display: inline !important;
+  overflow: visible !important;
+  -webkit-line-clamp: unset !important;
+  line-clamp: unset !important;
+  text-overflow: unset !important;
+  white-space: normal !important;
+}
+
+.linkedin-buddy-auto-expand .feed-shared-text div,
+.linkedin-buddy-auto-expand .feed-shared-update-v2__description div {
+  max-height: none !important;
+  display: block !important;
+  overflow: visible !important;
+  -webkit-line-clamp: unset !important;
+  line-clamp: unset !important;
+  text-overflow: unset !important;
+  white-space: normal !important;
+}
+
+/* Remove height restrictions from containing elements */
+.linkedin-buddy-auto-expand .feed-shared-text[dir="ltr"],
+.linkedin-buddy-auto-expand .feed-shared-text[dir="rtl"] {
+  max-height: none !important;
+  display: block !important;
+  overflow: visible !important;
+}
