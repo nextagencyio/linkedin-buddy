@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <meta charset="utf-8">
   <style>
@@ -8,10 +9,12 @@
       padding: 20px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
+
     .header {
       text-align: center;
       margin-bottom: 20px;
     }
+
     .feature-toggle {
       display: flex;
       justify-content: space-between;
@@ -21,16 +24,19 @@
       border: 1px solid #ddd;
       border-radius: 5px;
     }
+
     .toggle-switch {
       position: relative;
       width: 40px;
       height: 20px;
     }
+
     .toggle-switch input {
       opacity: 0;
       width: 0;
       height: 0;
     }
+
     .slider {
       position: absolute;
       cursor: pointer;
@@ -42,6 +48,7 @@
       transition: .4s;
       border-radius: 20px;
     }
+
     .slider:before {
       position: absolute;
       content: "";
@@ -53,12 +60,15 @@
       transition: .4s;
       border-radius: 50%;
     }
-    input:checked + .slider {
+
+    input:checked+.slider {
       background-color: #0077b5;
     }
-    input:checked + .slider:before {
+
+    input:checked+.slider:before {
       transform: translateX(20px);
     }
+
     .chat-button {
       width: 100%;
       padding: 10px;
@@ -70,17 +80,19 @@
       font-size: 14px;
       margin-top: 15px;
     }
+
     .chat-button:hover {
       background-color: #005885;
     }
   </style>
 </head>
+
 <body>
   <div class="header">
     <h2>LinkedIn Buddy</h2>
     <p>Enhance your LinkedIn experience</p>
   </div>
-  
+
   <div class="feature-toggle">
     <span>Enhanced Feed</span>
     <label class="toggle-switch">
@@ -88,7 +100,7 @@
       <span class="slider"></span>
     </label>
   </div>
-  
+
   <div class="feature-toggle">
     <span>Quick Actions</span>
     <label class="toggle-switch">
@@ -96,7 +108,7 @@
       <span class="slider"></span>
     </label>
   </div>
-  
+
   <div class="feature-toggle">
     <span>Auto-Expand Posts</span>
     <label class="toggle-switch">
@@ -104,7 +116,7 @@
       <span class="slider"></span>
     </label>
   </div>
-  
+
   <div class="feature-toggle">
     <span>Hide Sponsored Posts</span>
     <label class="toggle-switch">
@@ -112,7 +124,15 @@
       <span class="slider"></span>
     </label>
   </div>
-  
+
+  <div class="feature-toggle">
+    <span>Hide Recommended Posts</span>
+    <label class="toggle-switch">
+      <input type="checkbox" id="hideRecommended">
+      <span class="slider"></span>
+    </label>
+  </div>
+
   <div class="feature-toggle">
     <span>Chat Assistant</span>
     <label class="toggle-switch">
@@ -120,9 +140,10 @@
       <span class="slider"></span>
     </label>
   </div>
-  
+
   <button class="chat-button" id="openChat">Open Chat Assistant</button>
-  
+
   <script src="popup.js"></script>
 </body>
+
 </html>

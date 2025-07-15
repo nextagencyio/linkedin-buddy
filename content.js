@@ -12,6 +12,7 @@ class LinkedInBuddy {
       chatAssistant: false,
       autoExpandPosts: true,
       autoHideSponsored: false,
+      autoHideRecommended: false,
     };
 
     this.init();
@@ -107,6 +108,88 @@ class LinkedInBuddy {
     }
   }
 
+  startAutoHideRecommended() {
+    // Create observer for automatically hiding recommended posts
+    if (this.recommendedObserver) {
+      this.recommendedObserver.disconnect();
+    }
+
+    this.recommendedObserver = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        mutation.addedNodes.forEach((node) => {
+          if (node.nodeType === 1) { // Element node
+            this.hideNewRecommendedPosts(node);
+          }
+        });
+      });
+    });
+
+    this.recommendedObserver.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+
+    // Also hide existing recommended posts
+    this.hideNewRecommendedPosts(document);
+  }
+
+  stopAutoHideRecommended() {
+    if (this.recommendedObserver) {
+      this.recommendedObserver.disconnect();
+      this.recommendedObserver = null;
+    }
+  }
+
+  hideNewRecommendedPosts(container) {
+    let hiddenCount = 0;
+
+    // Find posts with "Recommended for you" header
+    const recommendedHeaders = container.querySelectorAll ? container.querySelectorAll('.update-components-header__text-view') : [];
+
+    recommendedHeaders.forEach(header => {
+      if (header.textContent.trim() === 'Recommended for you') {
+        // Find the containing feed post
+        const feedPost = header.closest('.feed-shared-update-v2');
+        if (feedPost && feedPost.style.display !== 'none') {
+          feedPost.style.display = 'none';
+          hiddenCount++;
+          console.log('LinkedIn Buddy: Hidden recommended post', feedPost);
+        }
+      }
+    });
+
+    // Also look for aggregated recommendation containers
+    const aggregatedSelectors = [
+      '[data-urn*="urn:li:aggregate:"]',
+      '.feed-shared-aggregated-content',
+      '.update-components-feed-discovery-entity'
+    ];
+
+    aggregatedSelectors.forEach(selector => {
+      const elements = container.querySelectorAll ? container.querySelectorAll(selector) : [];
+      elements.forEach(element => {
+        // Check if this contains recommendation content
+        const hasRecommendedText = element.textContent.includes('Recommended for you') ||
+          element.textContent.includes('People who are in') ||
+          element.textContent.includes('Trending pages in your network') ||
+          element.querySelector('.update-components-feed-discovery-entity');
+
+        if (hasRecommendedText) {
+          const postContainer = element.closest('.feed-shared-update-v2') || element;
+          if (postContainer && postContainer.style.display !== 'none') {
+            postContainer.style.display = 'none';
+            hiddenCount++;
+            console.log('LinkedIn Buddy: Hidden recommended aggregated content', postContainer);
+          }
+        }
+      });
+    });
+
+    if (hiddenCount > 0) {
+      console.log(`LinkedIn Buddy: Auto-hidden ${hiddenCount} recommended posts`);
+    }
+  }
+
   isHomepage() {
     const url = window.location.href;
     const pathname = window.location.pathname;
@@ -178,13 +261,14 @@ class LinkedInBuddy {
   }
 
   loadSettings() {
-    chrome.storage.sync.get(['enhancedFeed', 'quickActions', 'chatAssistant', 'autoExpandPosts', 'autoHideSponsored'], (result) => {
+    chrome.storage.sync.get(['enhancedFeed', 'quickActions', 'chatAssistant', 'autoExpandPosts', 'autoHideSponsored', 'autoHideRecommended'], (result) => {
       this.settings = {
         enhancedFeed: result.enhancedFeed || false,
         quickActions: result.quickActions || false,
         chatAssistant: result.chatAssistant || false,
         autoExpandPosts: result.autoExpandPosts !== undefined ? result.autoExpandPosts : true,
-        autoHideSponsored: result.autoHideSponsored || false
+        autoHideSponsored: result.autoHideSponsored || false,
+        autoHideRecommended: result.autoHideRecommended || false,
       };
       this.applySettings();
     });
@@ -196,6 +280,7 @@ class LinkedInBuddy {
     this.toggleChatAssistant(this.settings.chatAssistant);
     this.toggleAutoExpandPosts(this.settings.autoExpandPosts);
     this.toggleAutoHideSponsored(this.settings.autoHideSponsored);
+    this.toggleAutoHideRecommended(this.settings.autoHideRecommended);
   }
 
   createChatToggleButton() {
@@ -265,6 +350,7 @@ class LinkedInBuddy {
       <button class="quick-action-btn" data-action="copyProfile">Copy Profile URL</button>
       <button class="quick-action-btn" data-action="exportConnections">Export Connections</button>
       <button class="quick-action-btn" data-action="hideSponsored">Hide Sponsored Posts</button>
+      <button class="quick-action-btn" data-action="hideRecommended">Hide Recommended Posts</button>
       <button class="quick-action-btn" data-action="enhanceSearch">Enhance Search</button>
     `;
 
@@ -299,6 +385,9 @@ class LinkedInBuddy {
         case 'toggleAutoHideSponsored':
           this.toggleAutoHideSponsored(message.enabled);
           break;
+        case 'toggleAutoHideRecommended':
+          this.toggleAutoHideRecommended(message.enabled);
+          break;
       }
     });
   }
@@ -308,6 +397,14 @@ class LinkedInBuddy {
       this.startAutoHideSponsored();
     } else {
       this.stopAutoHideSponsored();
+    }
+  }
+
+  toggleAutoHideRecommended(enabled) {
+    if (enabled) {
+      this.startAutoHideRecommended();
+    } else {
+      this.stopAutoHideRecommended();
     }
   }
 
@@ -433,6 +530,11 @@ class LinkedInBuddy {
         // Also enable auto-hide for convenience
         this.toggleAutoHideSponsored(true);
         break;
+      case 'hideRecommended':
+        this.hideRecommendedPosts();
+        // Also enable auto-hide for convenience
+        this.toggleAutoHideRecommended(true);
+        break;
       case 'enhanceSearch':
         this.showNotification('Search enhancement feature coming soon!');
         break;
@@ -494,6 +596,55 @@ class LinkedInBuddy {
     });
 
     this.showNotification(`Hidden ${hiddenCount} sponsored posts`);
+  }
+
+  hideRecommendedPosts() {
+    let hiddenCount = 0;
+
+    // Find posts with "Recommended for you" header
+    const recommendedHeaders = document.querySelectorAll('.update-components-header__text-view');
+    console.log(`LinkedIn Buddy: Found ${recommendedHeaders.length} header elements to check`);
+
+    recommendedHeaders.forEach((header, index) => {
+      if (header.textContent.trim() === 'Recommended for you') {
+        // Find the containing feed post
+        const feedPost = header.closest('.feed-shared-update-v2');
+        if (feedPost && feedPost.style.display !== 'none') {
+          feedPost.style.display = 'none';
+          hiddenCount++;
+          console.log('LinkedIn Buddy: Hidden recommended post (manual)', feedPost);
+        }
+      }
+    });
+
+    // Also look for aggregated recommendation containers
+    const aggregatedSelectors = [
+      '[data-urn*="urn:li:aggregate:"]',
+      '.feed-shared-aggregated-content',
+      '.update-components-feed-discovery-entity'
+    ];
+
+    aggregatedSelectors.forEach(selector => {
+      const elements = document.querySelectorAll(selector);
+      elements.forEach(element => {
+        // Check if this contains recommendation content
+        const hasRecommendedText = element.textContent.includes('Recommended for you') ||
+          element.textContent.includes('People who are in') ||
+          element.textContent.includes('Trending pages in your network') ||
+          element.querySelector('.update-components-feed-discovery-entity');
+
+        if (hasRecommendedText) {
+          const postContainer = element.closest('.feed-shared-update-v2') || element;
+          if (postContainer && postContainer.style.display !== 'none') {
+            postContainer.style.display = 'none';
+            hiddenCount++;
+            console.log('LinkedIn Buddy: Hidden recommended aggregated content (manual)', postContainer);
+          }
+        }
+      });
+    });
+
+    this.showNotification(`Hidden ${hiddenCount} recommended posts`);
   }
 
   toggleAutoExpandPosts(enabled) {
