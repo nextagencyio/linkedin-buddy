@@ -1070,22 +1070,57 @@ class LinkedInBuddy {
         return; // Already processed
       }
 
-      const img = container.querySelector('.update-components-image__image');
-      if (img && img.style.display !== 'none') {
-        this.hideImage(container, img);
+      const images = container.querySelectorAll('.update-components-image__image');
+      if (images.length > 0) {
+        this.hideImagesInContainer(container, images);
+      }
+    });
+
+    // Find document/carousel containers in the node
+    const documentContainers = node.querySelectorAll ?
+      node.querySelectorAll('.update-components-document__container') : [];
+
+    documentContainers.forEach(container => {
+      if (container.querySelector('.linkedin-buddy-show-image-btn')) {
+        return; // Already processed
+      }
+
+      const iframe = container.querySelector('iframe');
+      if (iframe) {
+        this.hideDocumentContainer(container, iframe);
       }
     });
 
     // Also check if the node itself is an image container
     if (node.classList && node.classList.contains('update-components-image')) {
-      const img = node.querySelector('.update-components-image__image');
-      if (img && img.style.display !== 'none' && !node.querySelector('.linkedin-buddy-show-image-btn')) {
-        this.hideImage(node, img);
+      const images = node.querySelectorAll('.update-components-image__image');
+      if (images.length > 0 && !node.querySelector('.linkedin-buddy-show-image-btn')) {
+        this.hideImagesInContainer(node, images);
+      }
+    }
+
+    // Also check if the node itself is a document container
+    if (node.classList && node.classList.contains('update-components-document__container')) {
+      const iframe = node.querySelector('iframe');
+      if (iframe && !node.querySelector('.linkedin-buddy-show-image-btn')) {
+        this.hideDocumentContainer(node, iframe);
       }
     }
   }
 
-  hideImage(container, img) {
+  hideImagesInContainer(container, images) {
+    // Store original styles to restore later
+    const originalContainerStyle = container.style.cssText;
+    const originalPaddingTop = container.querySelector('.update-components-image__container')?.style.paddingTop;
+    const originalAspectRatio = container.querySelector('.update-components-image__container')?.style.aspectRatio;
+
+    // Count visible images
+    const visibleImages = Array.from(images).filter(img => img.style.display !== 'none');
+    if (visibleImages.length === 0) return;
+
+    const imageCount = visibleImages.length;
+    const buttonText = imageCount === 1 ? 'Show Image' : `Show ${imageCount} Images`;
+
     // Create the show image button
     const showButton = document.createElement('div');
     showButton.className = 'linkedin-buddy-show-image-btn';
@@ -1094,20 +1129,29 @@ class LinkedInBuddy {
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
           <path d="M14.5 3h-13A1.5 1.5 0 000 4.5v7A1.5 1.5 0 001.5 13h13a1.5 1.5 0 001.5-1.5v-7A1.5 1.5 0 0014.5 3zM3 6a1 1 0 110-2 1 1 0 010 2zm11 5H2V9l2.5-2.5L6 8l4.5-4.5L13 6v5z"/>
         </svg>
-        Show Image
+        ${buttonText}
       </button>
     `;
 
+    // Store original styles as data attributes for restoration
+    showButton.setAttribute('data-original-container-style', originalContainerStyle);
+    if (originalPaddingTop) {
+      showButton.setAttribute('data-original-padding-top', originalPaddingTop);
+    }
+    if (originalAspectRatio) {
+      showButton.setAttribute('data-original-aspect-ratio', originalAspectRatio);
+    }
+
     // Style the button to be compact
     showButton.style.cssText = `
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       background: rgba(0, 0, 0, 0.8);
       border-radius: 4px;
       padding: 8px 12px;
+      margin: 8px auto;
+      width: fit-content;
     `;
 
     showButton.querySelector('button').style.cssText = `
@@ -1122,29 +1166,214 @@ class LinkedInBuddy {
       font-weight: 500;
     `;
 
-    // Add click handler to show the image
+    // Add click handler to show all images
     showButton.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      img.style.display = '';
+
+      // Restore original styles
+      const originalContainerStyle = showButton.getAttribute('data-original-container-style');
+      const originalPaddingTop = showButton.getAttribute('data-original-padding-top');
+      const originalAspectRatio = showButton.getAttribute('data-original-aspect-ratio');
+
+      container.style.cssText = originalContainerStyle;
+
+      const containerElement = container.querySelector('.update-components-image__container');
+      if (containerElement) {
+        if (originalPaddingTop) {
+          containerElement.style.paddingTop = originalPaddingTop;
+        }
+        if (originalAspectRatio) {
+          containerElement.style.aspectRatio = originalAspectRatio;
+        }
+      }
+
+      // Restore aspect ratios on individual image link buttons
+      const imageLinks = container.querySelectorAll('.update-components-image__image-link');
+      imageLinks.forEach(link => {
+        const originalAspectRatio = link.getAttribute('data-original-aspect-ratio');
+        if (originalAspectRatio) {
+          link.style.aspectRatio = originalAspectRatio;
+          link.removeAttribute('data-original-aspect-ratio');
+        }
+        link.style.height = '';
+      });
+
+      // Show all images in this container
+      visibleImages.forEach(img => {
+        img.style.display = '';
+      });
+
       showButton.remove();
     });
 
-    // Hide the image and add the button
-    img.style.display = 'none';
+    // Hide all images
+    visibleImages.forEach(img => {
+      img.style.display = 'none';
+    });
+
+    // Remove the styles that create the aspect ratio and height
+    const containerElement = container.querySelector('.update-components-image__container');
+    if (containerElement) {
+      containerElement.style.paddingTop = '0';
+      containerElement.style.height = 'auto';
+      containerElement.style.aspectRatio = 'auto';
+    }
+
+    // Also reset aspect ratios on individual image link buttons
+    const imageLinks = container.querySelectorAll('.update-components-image__image-link');
+    imageLinks.forEach(link => {
+      // Store original aspect ratio for restoration
+      const originalAspectRatio = link.style.aspectRatio;
+      if (originalAspectRatio) {
+        link.setAttribute('data-original-aspect-ratio', originalAspectRatio);
+      }
+      link.style.aspectRatio = 'auto';
+      link.style.height = 'auto';
+    });
+
+    // Make container compact
     container.style.position = 'relative';
+    container.style.height = 'auto';
+    container.style.minHeight = 'auto';
+
+    container.appendChild(showButton);
+  }
+
+  hideDocumentContainer(container, iframe) {
+    // Store original styles to restore later
+    const originalContainerStyle = container.style.cssText;
+    const originalPaddingTop = container.style.paddingTop;
+
+    // Create the show carousel button
+    const showButton = document.createElement('div');
+    showButton.className = 'linkedin-buddy-show-image-btn';
+    showButton.innerHTML = `
+      <button type="button">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M2 4a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V4zm2-1a1 1 0 00-1 1v8a1 1 0 001 1h8a1 1 0 001-1V4a1 1 0 00-1-1H4z"/>
+          <path d="M6 8l4-3v6l-4-3z"/>
+        </svg>
+        Show Carousel
+      </button>
+    `;
+
+    // Store original styles as data attributes for restoration
+    showButton.setAttribute('data-original-container-style', originalContainerStyle);
+    if (originalPaddingTop) {
+      showButton.setAttribute('data-original-padding-top', originalPaddingTop);
+    }
+
+    // Style the button to be compact
+    showButton.style.cssText = `
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.8);
+      border-radius: 4px;
+      padding: 8px 12px;
+      margin: 8px auto;
+      width: fit-content;
+    `;
+
+    showButton.querySelector('button').style.cssText = `
+      background: transparent;
+      border: none;
+      color: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 500;
+    `;
+
+    // Add click handler to show the carousel
+    showButton.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      // Restore original styles
+      const originalContainerStyle = showButton.getAttribute('data-original-container-style');
+      const originalPaddingTop = showButton.getAttribute('data-original-padding-top');
+
+      container.style.cssText = originalContainerStyle;
+
+      if (originalPaddingTop) {
+        container.style.paddingTop = originalPaddingTop;
+      }
+
+      // Show the iframe
+      iframe.style.display = '';
+
+      showButton.remove();
+    });
+
+    // Hide the iframe and collapse the container
+    iframe.style.display = 'none';
+
+    // Remove the padding-top that creates the aspect ratio
+    container.style.paddingTop = '0';
+    container.style.height = 'auto';
+    container.style.position = 'relative';
+
     container.appendChild(showButton);
   }
 
   restoreAllImages() {
-    // Remove all show image buttons and restore images
+    // Remove all show image buttons and restore images/carousels
     const showButtons = document.querySelectorAll('.linkedin-buddy-show-image-btn');
     showButtons.forEach(button => {
       const container = button.parentElement;
-      const img = container.querySelector('.update-components-image__image');
-      if (img) {
-        img.style.display = '';
+      const images = container.querySelectorAll('.update-components-image__image');
+      const iframe = container.querySelector('iframe');
+
+      // Restore original styles
+      const originalContainerStyle = button.getAttribute('data-original-container-style');
+      const originalPaddingTop = button.getAttribute('data-original-padding-top');
+      const originalAspectRatio = button.getAttribute('data-original-aspect-ratio');
+
+      if (originalContainerStyle) {
+        container.style.cssText = originalContainerStyle;
       }
+
+      if (images.length > 0) {
+        // Handle image containers
+        const containerElement = container.querySelector('.update-components-image__container');
+        if (containerElement) {
+          if (originalPaddingTop) {
+            containerElement.style.paddingTop = originalPaddingTop;
+          }
+          if (originalAspectRatio) {
+            containerElement.style.aspectRatio = originalAspectRatio;
+          }
+        }
+
+        // Restore aspect ratios on individual image link buttons
+        const imageLinks = container.querySelectorAll('.update-components-image__image-link');
+        imageLinks.forEach(link => {
+          const originalAspectRatio = link.getAttribute('data-original-aspect-ratio');
+          if (originalAspectRatio) {
+            link.style.aspectRatio = originalAspectRatio;
+            link.removeAttribute('data-original-aspect-ratio');
+          }
+          link.style.height = '';
+        });
+
+        // Show all images in this container
+        images.forEach(img => {
+          img.style.display = '';
+        });
+      } else if (iframe) {
+        // Handle document/carousel containers
+        if (originalPaddingTop) {
+          container.style.paddingTop = originalPaddingTop;
+        }
+
+        // Show the iframe
+        iframe.style.display = '';
+      }
+
       button.remove();
     });
   }
