@@ -178,7 +178,7 @@ Give a 30-word answer with bullet points about trends/topics from the posts.`;
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      model: 'llama-3.1-8b-instant',
+      model: 'meta-llama/llama-guard-4-12b',
       temperature: 0.3,
       max_tokens: 4000,
     });

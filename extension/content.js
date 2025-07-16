@@ -1201,9 +1201,7 @@ class LinkedInBuddy {
       </div>
                   <div class="chat-messages" id="chatMessages">
         <div class="chat-message assistant" id="welcomeMessage">
-          👋 Hi! I'm LinkedIn Buddy, analyzing your feed for insights.
-
-          Try: "What's trending?" or "Show me AI posts"
+          👋 Hi! I'm LinkedIn Buddy.
         </div>
       </div>
       <div class="chat-input-area">
@@ -1757,7 +1755,7 @@ class LinkedInBuddy {
 
     if (!message) return;
 
-    this.addMessageToChat(message, 'user');
+    this.addMessageToChat(message, 'user', false);
     input.value = '';
 
     // Extract fresh posts before responding for better context
@@ -1769,14 +1767,20 @@ class LinkedInBuddy {
     }, 300);
   }
 
-  addMessageToChat(message, sender) {
+  addMessageToChat(message, sender, isHTML = false) {
     const messagesContainer = this.chatWidget.querySelector('#chatMessages');
     const messageDiv = document.createElement('div');
     messageDiv.className = `chat-message ${sender}`;
 
-    // Parse markdown for assistant messages
+    // Handle different message types
     if (sender === 'assistant') {
-      messageDiv.innerHTML = this.parseMarkdown(message);
+      if (isHTML) {
+        // For HTML content, use it directly (already safe HTML from our own functions)
+        messageDiv.innerHTML = message;
+      } else {
+        // For plain text, parse markdown
+        messageDiv.innerHTML = this.parseMarkdown(message);
+      }
     } else {
       messageDiv.textContent = message;
     }
@@ -1826,7 +1830,7 @@ class LinkedInBuddy {
       if (!isLinkedInRelated) {
         this.removeTypingIndicator();
         const redirectResponse = this.getRedirectResponse(message);
-        this.addMessageToChat(redirectResponse, 'assistant');
+        this.addMessageToChat(redirectResponse, 'assistant', false);
         return;
       }
 
@@ -1834,14 +1838,14 @@ class LinkedInBuddy {
       const response = await this.searchPostsWithRAG(message);
 
       this.removeTypingIndicator();
-      this.addMessageToChat(response, 'assistant');
+      this.addMessageToChat(response, 'assistant', false);
     } catch (error) {
       console.error('LinkedIn Buddy: Error processing message:', error);
       this.removeTypingIndicator();
 
       // Fallback to contextual LinkedIn responses
       const response = this.getContextualLinkedInResponse(message);
-      this.addMessageToChat(response, 'assistant');
+      this.addMessageToChat(response, 'assistant', false);
     }
   }
 
@@ -2030,8 +2034,32 @@ class LinkedInBuddy {
         `post_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
       // Extract author information with more details
-      const authorElement = postElement.querySelector('.update-components-actor__name');
-      const author = authorElement?.textContent?.trim() || 'Unknown Author';
+      const authorElement = postElement.querySelector('.update-components-actor__name') ||
+                           postElement.querySelector('.feed-shared-actor__name') ||
+                           postElement.querySelector('.actor-name') ||
+                           postElement.querySelector('[data-test-id="actor-name"]') ||
+                           postElement.querySelector('.feed-shared-actor .actor-name-with-distance .actor-name .visually-hidden') ||
+                           postElement.querySelector('.actor-name .visually-hidden') ||
+                           postElement.querySelector('a[data-test-id="actor-name"] span:not(.visually-hidden)') ||
+                           postElement.querySelector('.feed-shared-actor__name .visually-hidden');
+      
+      let author = authorElement?.textContent?.trim() || '';
+      
+      // If still no author found, try alternate approaches
+      if (!author || author === '') {
+        const actorLink = postElement.querySelector('a[href*="/in/"]');
+        if (actorLink) {
+          const linkText = actorLink.textContent?.trim();
+          if (linkText && linkText !== 'LinkedIn') {
+            author = linkText;
+          }
+        }
+      }
+      
+      // Final fallback
+      if (!author || author === '') {
+        author = 'Unknown Author';
+      }
 
       const authorTitleElement = postElement.querySelector('.update-components-actor__description');
       const authorTitle = authorTitleElement?.textContent?.trim() || '';
@@ -2304,19 +2332,53 @@ Or ask: "What's trending?" • "Show me AI posts"`;
     if (!welcomeElement) return;
 
     try {
+      // Show simple welcome message with summarize button
+      const welcomeHTML = `
+        👋 Hi! I'm LinkedIn Buddy.
+        <br><br>
+        <button class="summarize-posts-btn" style="
+          background: #0077b5; 
+          color: white; 
+          border: none; 
+          padding: 8px 16px; 
+          border-radius: 16px; 
+          cursor: pointer; 
+          font-size: 14px;
+          margin-top: 8px;
+        ">📝 Summarize Recent Posts</button>
+      `;
+
+      welcomeElement.innerHTML = welcomeHTML;
+
+      // Add click listener for the summarize button
+      const summarizeBtn = welcomeElement.querySelector('.summarize-posts-btn');
+      if (summarizeBtn) {
+        summarizeBtn.addEventListener('click', () => {
+          this.showPostSummaries();
+        });
+      }
+
+    } catch (error) {
+      console.warn('LinkedIn Buddy: Error updating welcome message:', error);
+    }
+  }
+
+  showPostSummaries() {
+    try {
       // Extract first 5 posts for summary
       const feedPosts = document.querySelectorAll('.feed-shared-update-v2');
       const firstFivePosts = Array.from(feedPosts).slice(0, 5);
 
       if (firstFivePosts.length === 0) {
-        return; // Keep default message if no posts found
+        this.addMessageToChat("I don't see any posts on your feed right now. Try refreshing the page!", 'assistant', false);
+        return;
       }
 
-      let welcomeHTML = '👋 Hi! I\'m LinkedIn Buddy. Here are the latest posts:<br><br>';
+      let summaryHTML = 'Here are the latest posts:<br><br>';
 
       firstFivePosts.forEach((post, index) => {
         try {
-          const postData = this.extractPostSummary(post);
+          const postData = this.extractBetterPostSummary(post);
           if (postData) {
             // Ensure this post is in our database for detailed view
             const fullPostData = this.extractComprehensivePostData(post);
@@ -2325,22 +2387,219 @@ Or ask: "What's trending?" • "Show me AI posts"`;
             }
 
             const postNumber = index + 1;
-            welcomeHTML += `<strong>${postNumber}.</strong> <a href="#" class="post-link" data-post-id="${postData.id}" style="color: #0077b5; text-decoration: underline;">${postData.summary}</a><br><br>`;
+            summaryHTML += `<strong>${postNumber}.</strong> <a href="#" class="post-link" data-post-id="${postData.id}" style="color: #0077b5; text-decoration: underline;">${postData.author}: ${postData.summary}</a><br><br>`;
           }
         } catch (error) {
-          console.warn('LinkedIn Buddy: Error extracting post summary:', error);
+          console.warn('LinkedIn Buddy: Error processing post for summary:', error);
         }
       });
 
-      welcomeHTML += 'Want to know more about any post? Just click it or ask me questions!';
+      summaryHTML += 'Click any post title to learn more!';
 
-      welcomeElement.innerHTML = welcomeHTML;
+      // Add the summary as a new message in the chat (with HTML flag)
+      this.addMessageToChat(summaryHTML, 'assistant', true);
 
       // Add click handlers for post links
-      this.addPostLinkHandlers();
+      setTimeout(() => {
+        this.addPostLinkHandlers();
+      }, 100);
 
     } catch (error) {
-      console.warn('LinkedIn Buddy: Error updating welcome message:', error);
+      console.warn('LinkedIn Buddy: Error showing post summaries:', error);
+      this.addMessageToChat("Sorry, I couldn't load the post summaries. Please try again.", 'assistant', false);
+    }
+  }
+
+  extractBetterPostSummary(postElement) {
+    try {
+      // Get post URL/ID
+      const postLink = postElement.querySelector('a[href*="/posts/"], a[href*="/feed/update/"]');
+      const postId = postLink?.getAttribute('href')?.split('/').pop() || 
+                    postElement.getAttribute('data-id') ||
+                    `post_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      // Extract author name with comprehensive debugging and selectors
+      let author = '';
+      let foundBy = '';
+      
+      // Try multiple specific selectors for LinkedIn author names
+      const authorSelectors = [
+        '.update-components-actor__name',
+        '.feed-shared-actor__name', 
+        '.actor-name',
+        '[data-test-id="actor-name"]',
+        '.feed-shared-actor .actor-name-with-distance .actor-name .visually-hidden',
+        '.actor-name .visually-hidden',
+        'a[data-test-id="actor-name"] span:not(.visually-hidden)',
+        '.feed-shared-actor__name .visually-hidden',
+        '.feed-shared-actor__name span',
+        '.update-components-actor__name span',
+        '.feed-shared-actor .visually-hidden',
+        '.update-components-actor .visually-hidden',
+        '.entity-result__primary-subtitle',
+        '.artdeco-entity-lockup__title',
+        '.artdeco-entity-lockup__subtitle',
+        'span[aria-hidden="true"]:not(.visually-hidden)',
+        '.t-14.t-black.t-bold',
+        '.feed-shared-actor span[aria-hidden="true"]'
+      ];
+      
+      for (const selector of authorSelectors) {
+        const element = postElement.querySelector(selector);
+        if (element) {
+          const text = element.textContent?.trim();
+          if (text && text.length > 0 && text !== 'LinkedIn' && !text.includes('•') && !text.includes('ago')) {
+            author = text;
+            foundBy = selector;
+            break;
+          }
+        }
+      }
+      
+      // If still no author found, try finding any profile link
+      if (!author || author === '') {
+        const profileLinks = postElement.querySelectorAll('a[href*="/in/"]');
+        for (const link of profileLinks) {
+          const linkText = link.textContent?.trim();
+          // Skip certain patterns that aren't names
+          if (linkText && 
+              linkText !== 'LinkedIn' && 
+              !linkText.includes('•') && 
+              !linkText.includes('ago') &&
+              !linkText.includes('View') &&
+              !linkText.includes('Follow') &&
+              linkText.length > 2 &&
+              linkText.length < 50) {
+            author = linkText;
+            foundBy = 'profile-link';
+            break;
+          }
+        }
+      }
+      
+      // Try looking for names in span elements near the top of the post
+      if (!author || author === '') {
+        const topSpans = postElement.querySelectorAll('.feed-shared-actor span, .update-components-actor span');
+        for (const span of topSpans) {
+          const text = span.textContent?.trim();
+          if (text && 
+              text.length > 2 && 
+              text.length < 50 &&
+              !text.includes('•') && 
+              !text.includes('ago') &&
+              !text.includes('View') &&
+              !text.includes('Follow') &&
+              !text.includes('LinkedIn')) {
+            author = text;
+            foundBy = 'span-search';
+            break;
+          }
+        }
+      }
+      
+      // Debug logging
+      if (author && author !== 'Someone') {
+        console.log(`LinkedIn Buddy: Found author "${author}" using selector: ${foundBy}`);
+      } else {
+        console.log('LinkedIn Buddy: Failed to find author name, post structure:', postElement.innerHTML.substring(0, 500));
+      }
+      
+      // Final fallback
+      if (!author || author === '') {
+        author = 'Someone';
+      }
+
+      // Extract post content for summary with better selectors
+      const textElement = postElement.querySelector('.feed-shared-text__text-view') ||
+        postElement.querySelector('.update-components-text') ||
+        postElement.querySelector('.feed-shared-update-v2__description') ||
+        postElement.querySelector('.feed-shared-text') ||
+        postElement.querySelector('[data-test-id="main-feed-activity-card"] .feed-shared-text') ||
+        postElement.querySelector('.update-components-text .break-words');
+
+      let text = '';
+      if (textElement) {
+        // Try multiple ways to get the text content
+        const expandedText = textElement.querySelector('.feed-shared-text span[dir]') ||
+                            textElement.querySelector('span[dir]') ||
+                            textElement.querySelector('.break-words');
+        text = expandedText?.textContent?.trim() || textElement.textContent?.trim() || '';
+        
+        // Clean up the text (remove excessive whitespace, etc.)
+        text = text.replace(/\s+/g, ' ').trim();
+      }
+
+      // Create a 1-sentence summary
+      let summary = '';
+      if (text && text.length > 15) {
+        // Take first sentence or first 100 characters for better context
+        const sentences = text.split(/[.!?]+/);
+        const firstSentence = sentences[0]?.trim();
+        if (firstSentence && firstSentence.length > 10) {
+          summary = firstSentence.length > 100 ? firstSentence.substring(0, 100) + '...' : firstSentence;
+        }
+      }
+      
+      // If no good text content, check for shared content with better selectors
+      if (!summary || summary.length < 10) {
+        const articleTitle = postElement.querySelector('.update-components-article__title') ||
+                            postElement.querySelector('.article-title') ||
+                            postElement.querySelector('[data-test-id="article-title"]');
+        const videoTitle = postElement.querySelector('.update-components-video__title') ||
+                          postElement.querySelector('.video-title');
+        const imageDescription = postElement.querySelector('.update-components-image__description') ||
+                                postElement.querySelector('.image-description');
+        const pollQuestion = postElement.querySelector('.update-components-poll__question') ||
+                            postElement.querySelector('.poll-question');
+        const eventTitle = postElement.querySelector('.update-components-event__title') ||
+                          postElement.querySelector('.event-title');
+        
+        // Look for shared content indicators
+        const sharedContent = postElement.querySelector('.update-components-reshare') ||
+                             postElement.querySelector('.feed-shared-article') ||
+                             postElement.querySelector('.feed-shared-video') ||
+                             postElement.querySelector('.feed-shared-external');
+        
+        if (articleTitle) {
+          const title = articleTitle.textContent?.trim();
+          summary = title ? `shared: "${title}"` : 'shared an article';
+        } else if (videoTitle) {
+          const title = videoTitle.textContent?.trim();
+          summary = title ? `shared: "${title}"` : 'shared a video';
+        } else if (imageDescription) {
+          const desc = imageDescription.textContent?.trim();
+          summary = desc ? `shared: "${desc}"` : 'shared an image';
+        } else if (pollQuestion) {
+          const question = pollQuestion.textContent?.trim();
+          summary = question ? `asked: "${question}"` : 'created a poll';
+        } else if (eventTitle) {
+          const title = eventTitle.textContent?.trim();
+          summary = title ? `shared event: "${title}"` : 'shared an event';
+        } else if (sharedContent) {
+          // Look for any text within shared content
+          const sharedText = sharedContent.textContent?.trim().split(/\s+/).slice(0, 10).join(' ');
+          summary = sharedText ? `shared: "${sharedText}..."` : 'shared content';
+        } else {
+          // Last resort: look for any meaningful text in the post
+          const allText = postElement.textContent?.trim();
+          if (allText && allText.length > 20) {
+            const words = allText.split(/\s+/).slice(0, 8).join(' ');
+            summary = `posted: "${words}..."`;
+          } else {
+            summary = 'shared a post';
+          }
+        }
+      }
+
+      return {
+        id: postId,
+        author: author,
+        summary: summary
+      };
+
+    } catch (error) {
+      console.warn('LinkedIn Buddy: Error extracting post summary:', error);
+      return null;
     }
   }
 
@@ -2352,9 +2611,33 @@ Or ask: "What's trending?" • "Show me AI posts"`;
         postElement.querySelector('[data-id]')?.getAttribute('data-id') ||
         `post_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-      // Extract author
-      const authorElement = postElement.querySelector('.update-components-actor__name');
-      const author = authorElement?.textContent?.trim() || 'Someone';
+      // Extract author with multiple fallback selectors
+      const authorElement = postElement.querySelector('.update-components-actor__name') ||
+                           postElement.querySelector('.feed-shared-actor__name') ||
+                           postElement.querySelector('.actor-name') ||
+                           postElement.querySelector('[data-test-id="actor-name"]') ||
+                           postElement.querySelector('.feed-shared-actor .actor-name-with-distance .actor-name .visually-hidden') ||
+                           postElement.querySelector('.actor-name .visually-hidden') ||
+                           postElement.querySelector('a[data-test-id="actor-name"] span:not(.visually-hidden)') ||
+                           postElement.querySelector('.feed-shared-actor__name .visually-hidden');
+      
+      let author = authorElement?.textContent?.trim() || '';
+      
+      // If still no author found, try alternate approaches
+      if (!author || author === '') {
+        const actorLink = postElement.querySelector('a[href*="/in/"]');
+        if (actorLink) {
+          const linkText = actorLink.textContent?.trim();
+          if (linkText && linkText !== 'LinkedIn') {
+            author = linkText;
+          }
+        }
+      }
+      
+      // Final fallback
+      if (!author || author === '') {
+        author = 'Someone';
+      }
 
       // Extract main content
       const textElement = postElement.querySelector('.feed-shared-text__text-view') ||
@@ -2415,7 +2698,7 @@ Or ask: "What's trending?" • "Show me AI posts"`;
 
   handlePostClick(postId, summary) {
     // Add user message showing which post they clicked
-    this.addMessageToChat(`Tell me more about: ${summary}`, 'user');
+    this.addMessageToChat(`Tell me more about: ${summary}`, 'user', false);
 
     // Add typing indicator
     this.addTypingIndicator();
@@ -2447,9 +2730,9 @@ Or ask: "What's trending?" • "Show me AI posts"`;
           response += `**Engagement:** ${fullPost.reactions || '0'} reactions, ${fullPost.commentCount || '0'} comments`;
         }
 
-        this.addMessageToChat(response, 'assistant');
+        this.addMessageToChat(response, 'assistant', false);
       } else {
-        this.addMessageToChat('I need to extract more details about this post. Try asking me a specific question about it!', 'assistant');
+        this.addMessageToChat('I need to extract more details about this post. Try asking me a specific question about it!', 'assistant', false);
       }
     }, 800);
   }
