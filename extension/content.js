@@ -1243,7 +1243,6 @@ class LinkedInBuddy {
   hideDocumentContainer(container, iframe) {
     // Store original styles to restore later
     const originalContainerStyle = container.style.cssText;
-    const originalPaddingTop = container.style.paddingTop;
 
     // Create the show carousel button
     const showButton = document.createElement('div');
@@ -1251,8 +1250,8 @@ class LinkedInBuddy {
     showButton.innerHTML = `
       <button type="button">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-          <path d="M2 4a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V4zm2-1a1 1 0 00-1 1v8a1 1 0 001 1h8a1 1 0 001-1V4a1 1 0 00-1-1H4z"/>
-          <path d="M6 8l4-3v6l-4-3z"/>
+          <path d="M14 2H2a1 1 0 00-1 1v10a1 1 0 001 1h12a1 1 0 001-1V3a1 1 0 00-1-1zM2 3h12v10H2V3z"/>
+          <path d="M4 5h8v1H4V5zm0 2h6v1H4V7zm0 2h8v1H4V9z"/>
         </svg>
         Show Carousel
       </button>
@@ -1260,9 +1259,6 @@ class LinkedInBuddy {
 
     // Store original styles as data attributes for restoration
     showButton.setAttribute('data-original-container-style', originalContainerStyle);
-    if (originalPaddingTop) {
-      showButton.setAttribute('data-original-padding-top', originalPaddingTop);
-    }
 
     // Style the button to be compact
     showButton.style.cssText = `
@@ -1274,7 +1270,20 @@ class LinkedInBuddy {
       padding: 8px 12px;
       margin: 8px auto;
       width: fit-content;
+      z-index: 9999;
+      position: relative;
+      pointer-events: all;
+      border: 1px solid rgba(255, 255, 255, 0.3);
     `;
+
+    // Add hover effect for debugging
+    showButton.addEventListener('mouseenter', () => {
+      showButton.style.background = 'rgba(0, 119, 181, 0.9)';
+      console.log('LinkedIn Buddy: Carousel button hovered');
+    });
+    showButton.addEventListener('mouseleave', () => {
+      showButton.style.background = 'rgba(0, 0, 0, 0.8)';
+    });
 
     showButton.querySelector('button').style.cssText = `
       background: transparent;
@@ -1286,28 +1295,48 @@ class LinkedInBuddy {
       gap: 6px;
       font-size: 12px;
       font-weight: 500;
+      pointer-events: all;
+      z-index: 1001;
+      position: relative;
     `;
 
-    // Add click handler to show the carousel
-    showButton.addEventListener('click', (e) => {
+    // Add multiple click handlers to ensure the carousel shows
+    const handleCarouselClick = (e) => {
       e.preventDefault();
       e.stopPropagation();
+      e.stopImmediatePropagation();
+
+      console.log('LinkedIn Buddy: Show carousel button clicked');
 
       // Restore original styles
       const originalContainerStyle = showButton.getAttribute('data-original-container-style');
-      const originalPaddingTop = showButton.getAttribute('data-original-padding-top');
+      console.log('LinkedIn Buddy: Original container style:', originalContainerStyle);
 
-      container.style.cssText = originalContainerStyle;
-
-      if (originalPaddingTop) {
-        container.style.paddingTop = originalPaddingTop;
+      // Restore the original container styles completely
+      if (originalContainerStyle) {
+        container.style.cssText = originalContainerStyle;
+      } else {
+        // Fallback if no original styles stored
+        console.log('LinkedIn Buddy: No original styles found, using fallback');
+        container.style.position = 'relative';
+        container.style.height = '';
+        container.style.paddingTop = '';
       }
 
       // Show the iframe
       iframe.style.display = '';
+      console.log('LinkedIn Buddy: Iframe display restored, button removed');
 
       showButton.remove();
-    });
+    };
+
+    // Add click handlers to both the container and the button
+    showButton.addEventListener('click', handleCarouselClick, true);
+    showButton.addEventListener('mousedown', handleCarouselClick, true);
+
+    const button = showButton.querySelector('button');
+    button.addEventListener('click', handleCarouselClick, true);
+    button.addEventListener('mousedown', handleCarouselClick, true);
 
     // Hide the iframe and collapse the container
     iframe.style.display = 'none';
@@ -1317,7 +1346,12 @@ class LinkedInBuddy {
     container.style.height = 'auto';
     container.style.position = 'relative';
 
-    container.appendChild(showButton);
+    // Try inserting the button after the container instead of inside it
+    if (container.parentElement) {
+      container.parentElement.insertBefore(showButton, container.nextSibling);
+    } else {
+      container.appendChild(showButton);
+    }
   }
 
   restoreAllImages() {
@@ -1366,8 +1400,13 @@ class LinkedInBuddy {
         });
       } else if (iframe) {
         // Handle document/carousel containers
-        if (originalPaddingTop) {
-          container.style.paddingTop = originalPaddingTop;
+        if (originalContainerStyle) {
+          container.style.cssText = originalContainerStyle;
+        } else {
+          // Fallback restoration
+          container.style.position = '';
+          container.style.height = '';
+          container.style.paddingTop = '';
         }
 
         // Show the iframe
