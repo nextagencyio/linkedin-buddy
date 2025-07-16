@@ -28,8 +28,35 @@ try {
 
 // Middleware.
 app.use(cors({
-  origin: ['chrome-extension://*', 'http://localhost:*'],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, Postman)
+    if (!origin) return callback(null, true);
+
+    // Allow Chrome extension origins
+    if (origin.startsWith('chrome-extension://')) {
+      return callback(null, true);
+    }
+
+    // Allow localhost for development
+    if (origin.startsWith('http://localhost') || origin.startsWith('https://localhost')) {
+      return callback(null, true);
+    }
+
+    // Allow LinkedIn domains
+    if (origin.includes('linkedin.com')) {
+      return callback(null, true);
+    }
+
+    // For development, allow all origins
+    if (process.env.NODE_ENV === 'development') {
+      return callback(null, true);
+    }
+
+    callback(new Error('Not allowed by CORS'));
+  },
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
@@ -108,33 +135,42 @@ For now, I can tell you that I have ${postDatabase.length} LinkedIn posts availa
       });
     }
 
-    // Prepare context from stored posts.
+    // Prepare comprehensive context from stored posts.
     const context = postDatabase
-      .slice(0, maxResults * 2) // Get more posts to choose from.
+      .slice(0, maxResults * 3) // Get more posts for better context.
       .map(post => {
         const content = [
-          post.author ? `Author: ${post.author}` : '',
-          post.text ? `Content: ${post.text}` : '',
-          post.hashtags ? `Tags: ${post.hashtags.join(', ')}` : '',
-          post.engagement ? `Engagement: ${post.engagement}` : '',
+          post.author ? `Author: ${post.author}${post.authorTitle ? ` (${post.authorTitle})` : ''}${post.isCompanyPost ? ' [Company Page]' : ''}` : '',
+          post.text ? `Post: ${post.text}` : '',
+          post.articleTitle ? `Article: ${post.articleTitle}` : '',
+          post.articleDescription ? `Description: ${post.articleDescription}` : '',
+          post.hashtags && post.hashtags.length > 0 ? `Hashtags: ${post.hashtags.join(', ')}` : '',
+          post.mentions && post.mentions.length > 0 ? `Mentions: ${post.mentions.join(', ')}` : '',
+          post.comments && post.comments.length > 0 ? `Comments: ${post.comments.map(c => `${c.author}: ${c.text}`).join(' | ')}` : '',
+          post.reactions && post.commentCount && post.reposts ? `Engagement: ${post.reactions} reactions, ${post.commentCount} comments, ${post.reposts} reposts` : '',
+          post.category ? `Type: ${post.category}` : '',
+          post.postTime ? `Time: ${post.postTime}` : '',
         ].filter(Boolean).join('\n');
 
-        return `Post ID: ${post.id}\n${content}\n---`;
+        return `=== POST ${post.id} ===\n${content}\n`;
       })
-      .join('\n\n');
+      .join('\n');
 
-    // Create RAG prompt.
-    const systemPrompt = `You are an AI assistant helping analyze LinkedIn posts. Use the provided post content to answer questions accurately and provide relevant insights. If the information isn't available in the posts, say so clearly.
+    // Create LinkedIn-focused RAG prompt.
+    const systemPrompt = `You are LinkedIn Buddy. Answer in EXACTLY 30 words or less.
 
-Available LinkedIn Posts:
-${context}`;
+Current LinkedIn Feed Content:
+${context}
 
-    const userPrompt = `Based on the LinkedIn posts provided, please answer this question: ${query}
+STRICT RULES:
+- MAXIMUM 30 words total
+- Use bullet points: • Topic: brief description
+- No explanations
+- No "I see" or "Based on" introductions`;
 
-Please provide:
-1. A direct answer to the question
-2. Relevant post references if applicable
-3. Any insights or patterns you notice from the content`;
+    const userPrompt = `Question: "${query}"
+
+Give a 30-word answer with bullet points about trends/topics from the posts.`;
 
     // Call Groq API.
     const completion = await groq.chat.completions.create({
@@ -142,9 +178,9 @@ Please provide:
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      model: 'llama-3.1-70b-versatile',
+      model: 'llama-3.1-8b-instant',
       temperature: 0.3,
-      max_tokens: 1000,
+      max_tokens: 4000,
     });
 
     const response = completion.choices[0]?.message?.content;

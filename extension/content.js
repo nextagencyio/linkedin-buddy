@@ -877,32 +877,108 @@ class LinkedInBuddy {
       pathname === '/feed/' ||
       pathname === '/' ||
       pathname.startsWith('/feed') ||
-      url.includes('/feed/')
+      url.includes('/feed/') ||
+      // Handle case where we're on root LinkedIn domain
+      (pathname === '' && url === 'https://www.linkedin.com/')
     );
 
-    // Debug logging (can be removed in production)
+    // Debug logging
     if (window.location.hostname.includes('linkedin.com')) {
-      console.log('LinkedIn Buddy - Auto-Expand Posts:', isHomepage ? 'ENABLED (Homepage)' : 'DISABLED (Not Homepage)', 'URL:', url);
+      console.log('LinkedIn Buddy - Homepage check:', {
+        url: url,
+        pathname: pathname,
+        isHomepage: isHomepage,
+        checks: {
+          'pathname === /feed/': pathname === '/feed/',
+          'pathname === /': pathname === '/',
+          'pathname.startsWith(/feed)': pathname.startsWith('/feed'),
+          'url.includes(/feed/)': url.includes('/feed/'),
+          'root domain check': (pathname === '' && url === 'https://www.linkedin.com/')
+        }
+      });
     }
 
     return isHomepage;
   }
 
+  isNotificationsPage() {
+    const url = window.location.href;
+    const pathname = window.location.pathname;
+
+    // LinkedIn notifications page patterns
+    const isNotifications = (
+      pathname.startsWith('/notifications') ||
+      url.includes('/notifications/')
+    );
+
+    // Debug logging
+    if (window.location.hostname.includes('linkedin.com') && isNotifications) {
+      console.log('LinkedIn Buddy: On notifications page - disabling hide/expand features');
+    }
+
+    return isNotifications;
+  }
+
   init() {
     if (this.isInitialized) return;
 
+    // Always set up URL change listener and load settings
     this.loadSettings();
+    this.setupUrlChangeListener();
+    
+    // Only initialize features if we're on the homepage
+    if (this.isHomepage()) {
+      this.initializeHomepageFeatures();
+    }
+
+    this.isInitialized = true;
+  }
+
+  initializeHomepageFeatures() {
+    console.log('LinkedIn Buddy: Initializing homepage features');
+    
     this.createChatToggleButton();
     this.createChatWidget();
     this.setupMessageListener();
-    this.setupUrlChangeListener();
+    
     // Clean up any existing stats injections
     this.cleanupStatsInjections();
 
     // Start extracting and syncing post content
     this.startPostExtraction();
 
-    this.isInitialized = true;
+    // Add periodic check to ensure features are working on homepage
+    this.startPeriodicCheck();
+  }
+
+  startPeriodicCheck() {
+    // Check every 5 seconds if we're on homepage but features aren't active
+    this.periodicCheckInterval = setInterval(() => {
+      if (this.isHomepage() && this.settings.chatAssistant && this.toggleButton.style.display === 'none') {
+        console.log('LinkedIn Buddy: Detected homepage but features not active - reapplying settings');
+        this.applySettings();
+      }
+    }, 5000);
+  }
+
+  stopPeriodicCheck() {
+    if (this.periodicCheckInterval) {
+      clearInterval(this.periodicCheckInterval);
+      this.periodicCheckInterval = null;
+    }
+  }
+
+  isAnyFeatureEnabled() {
+    // All features only work on homepage/feed page
+    if (this.isHomepage()) {
+      return this.settings.chatAssistant ||
+        this.settings.autoExpandPosts ||
+        this.settings.autoHideSponsored ||
+        this.settings.autoHideRecommended ||
+        this.settings.hideImages;
+    }
+
+    return false;
   }
 
   cleanupStatsInjections() {
@@ -912,28 +988,83 @@ class LinkedInBuddy {
   }
 
   setupUrlChangeListener() {
-    // Listen for URL changes in SPA navigation
-    const observer = new MutationObserver(() => {
+    if (this.urlChangeObserver) {
+      this.urlChangeObserver.disconnect();
+    }
+
+    // Enhanced URL change detection
+    const handleUrlChange = () => {
       if (this.currentUrl !== window.location.href) {
         const previousUrl = this.currentUrl;
         this.currentUrl = window.location.href;
 
-        // Clean up previous page modifications if we're leaving the homepage
-        if (previousUrl && previousUrl.includes('/feed/') && !this.isHomepage()) {
-          this.cleanupAutoExpandModifications();
-        }
+        console.log('LinkedIn Buddy: URL changed from', previousUrl, 'to', this.currentUrl);
 
-        // Reapply auto-expand setting when URL changes
-        this.toggleAutoExpandPosts(this.settings.autoExpandPosts);
+        // Add small delay to ensure page is ready
+        setTimeout(() => {
+          this.handlePageNavigation(previousUrl);
+        }, 100);
       }
-    });
+    };
 
-    observer.observe(document.body, {
+    // Listen for URL changes in SPA navigation
+    this.urlChangeObserver = new MutationObserver(handleUrlChange);
+
+    this.urlChangeObserver.observe(document.body, {
       childList: true,
       subtree: true
     });
 
+    // Also listen for popstate events (back/forward navigation)
+    window.addEventListener('popstate', handleUrlChange);
+
+    // Store the event listener for cleanup
+    this.urlChangeHandler = handleUrlChange;
+
     this.currentUrl = window.location.href;
+  }
+
+  handlePageNavigation(previousUrl) {
+    const wasOnHomepage = previousUrl && (previousUrl.includes('/feed/') || previousUrl === window.location.origin + '/' || previousUrl.endsWith('/'));
+    const isNowOnHomepage = this.isHomepage();
+
+    console.log('LinkedIn Buddy: Navigation check - was on homepage:', wasOnHomepage, 'now on homepage:', isNowOnHomepage);
+
+    // Clean up features when leaving the homepage/feed
+    if (wasOnHomepage && !isNowOnHomepage) {
+      console.log('LinkedIn Buddy: Leaving homepage - cleaning up all features');
+      this.cleanupAllFeatures();
+      this.destroyHomepageElements();
+    }
+
+    // Initialize features when arriving at homepage
+    if (!wasOnHomepage && isNowOnHomepage) {
+      console.log('LinkedIn Buddy: Arriving at homepage - initializing features');
+      setTimeout(() => {
+        this.initializeHomepageFeatures();
+        this.applySettings();
+      }, 200);
+    }
+
+    // Always reapply settings on homepage to ensure everything is working
+    if (isNowOnHomepage && wasOnHomepage) {
+      console.log('LinkedIn Buddy: Still on homepage - ensuring all settings are applied');
+      setTimeout(() => {
+        this.applySettings();
+      }, 200);
+    }
+  }
+
+  stopUrlChangeListener() {
+    if (this.urlChangeObserver) {
+      this.urlChangeObserver.disconnect();
+      this.urlChangeObserver = null;
+    }
+
+    if (this.urlChangeHandler) {
+      window.removeEventListener('popstate', this.urlChangeHandler);
+      this.urlChangeHandler = null;
+    }
   }
 
   cleanupAutoExpandModifications() {
@@ -958,19 +1089,78 @@ class LinkedInBuddy {
         autoHideRecommended: result.autoHideRecommended || false,
         hideImages: result.hideImages || false,
       };
-      this.applySettings();
+
+      console.log('LinkedIn Buddy: Settings loaded:', this.settings, 'Current page:', window.location.href);
+
+      // Apply settings with a small delay to ensure page is ready
+      setTimeout(() => {
+        this.applySettings();
+      }, 100);
     });
   }
 
   applySettings() {
+    console.log('LinkedIn Buddy: Applying settings on page:', window.location.href, 'isHomepage:', this.isHomepage());
+
     this.toggleChatAssistant(this.settings.chatAssistant);
     this.toggleAutoExpandPosts(this.settings.autoExpandPosts);
     this.toggleAutoHideSponsored(this.settings.autoHideSponsored);
     this.toggleAutoHideRecommended(this.settings.autoHideRecommended);
     this.toggleHideImages(this.settings.hideImages);
+
+    // If no features are enabled, ensure we clean up everything
+    if (!this.isAnyFeatureEnabled()) {
+      this.cleanupAllFeatures();
+    }
+  }
+
+  cleanupAllFeatures() {
+    this.stopAutoHideSponsored();
+    this.stopAutoHideRecommended();
+    this.stopImageHiding();
+    this.restoreAllImages();
+    this.stopObservingForNewPosts();
+    this.stopPostExtraction();
+    this.stopPeriodicCheck();
+    
+    // Hide UI elements but don't remove them
+    if (this.toggleButton) {
+      this.toggleButton.style.display = 'none';
+    }
+    if (this.chatWidget) {
+      this.chatWidget.classList.remove('visible');
+    }
+    
+    document.body.classList.remove('linkedin-buddy-auto-expand');
+    document.body.classList.remove('linkedin-buddy-enhanced');
+    console.log('LinkedIn Buddy: All features disabled - cleaned up');
+  }
+
+  destroyHomepageElements() {
+    console.log('LinkedIn Buddy: Destroying homepage elements');
+    
+    // Completely remove toggle button
+    if (this.toggleButton && this.toggleButton.parentNode) {
+      this.toggleButton.parentNode.removeChild(this.toggleButton);
+      this.toggleButton = null;
+    }
+
+    // Completely remove chat widget
+    if (this.chatWidget && this.chatWidget.parentNode) {
+      this.chatWidget.parentNode.removeChild(this.chatWidget);
+      this.chatWidget = null;
+    }
+
+    // Note: We keep the URL change listener active so we can detect
+    // when the user returns to the homepage
   }
 
   createChatToggleButton() {
+    // Don't create if it already exists
+    if (this.toggleButton) {
+      return;
+    }
+    
     this.toggleButton = document.createElement('button');
     this.toggleButton.className = 'linkedin-buddy-toggle';
     this.toggleButton.innerHTML = `
@@ -983,6 +1173,9 @@ class LinkedInBuddy {
     `;
     this.toggleButton.title = 'Open LinkedIn Buddy Chat';
 
+    // Hide by default until settings are loaded
+    this.toggleButton.style.display = 'none';
+
     this.toggleButton.addEventListener('click', () => {
       this.toggleChat();
     });
@@ -991,16 +1184,26 @@ class LinkedInBuddy {
   }
 
   createChatWidget() {
+    // Don't create if it already exists
+    if (this.chatWidget) {
+      return;
+    }
+    
     this.chatWidget = document.createElement('div');
     this.chatWidget.className = 'linkedin-buddy-chat';
     this.chatWidget.innerHTML = `
       <div class="chat-header">
         <h3>LinkedIn Buddy</h3>
+        <div class="post-counter" id="postCounter">
+          <span class="post-count">0</span> posts analyzed
+        </div>
         <button class="chat-close">×</button>
       </div>
-      <div class="chat-messages" id="chatMessages">
-        <div class="chat-message assistant">
-          Hello! I'm your LinkedIn Buddy. How can I help you today?
+                  <div class="chat-messages" id="chatMessages">
+        <div class="chat-message assistant" id="welcomeMessage">
+          👋 Hi! I'm LinkedIn Buddy, analyzing your feed for insights.
+
+          Try: "What's trending?" or "Show me AI posts"
         </div>
       </div>
       <div class="chat-input-area">
@@ -1028,6 +1231,14 @@ class LinkedInBuddy {
         this.sendMessage();
       }
     });
+
+    // Initialize post counter
+    this.updatePostCounter();
+
+    // Generate dynamic welcome message with post summaries if on homepage
+    setTimeout(() => {
+      this.updateWelcomeMessage();
+    }, 2000); // Wait for posts to load
   }
 
 
@@ -1061,7 +1272,7 @@ class LinkedInBuddy {
 
 
   toggleAutoHideSponsored(enabled) {
-    if (enabled) {
+    if (enabled && this.isHomepage() && !this.isNotificationsPage()) {
       this.startAutoHideSponsored();
     } else {
       this.stopAutoHideSponsored();
@@ -1069,7 +1280,7 @@ class LinkedInBuddy {
   }
 
   toggleAutoHideRecommended(enabled) {
-    if (enabled) {
+    if (enabled && this.isHomepage() && !this.isNotificationsPage()) {
       this.startAutoHideRecommended();
     } else {
       this.stopAutoHideRecommended();
@@ -1077,7 +1288,7 @@ class LinkedInBuddy {
   }
 
   toggleHideImages(enabled) {
-    if (enabled) {
+    if (enabled && this.isHomepage() && !this.isNotificationsPage()) {
       this.startImageHiding();
     } else {
       this.stopImageHiding();
@@ -1532,6 +1743,12 @@ class LinkedInBuddy {
   openChat() {
     this.chatWidget.classList.add('visible');
     this.toggleButton.classList.add('hidden');
+
+    // Refresh welcome message when chat is opened
+    setTimeout(() => {
+      this.extractCurrentPosts();
+      this.updateWelcomeMessage();
+    }, 500);
   }
 
   sendMessage() {
@@ -1543,19 +1760,59 @@ class LinkedInBuddy {
     this.addMessageToChat(message, 'user');
     input.value = '';
 
-    // Simulate assistant response
+    // Extract fresh posts before responding for better context
+    this.extractCurrentPosts();
+
+    // Handle the user message
     setTimeout(() => {
       this.handleUserMessage(message);
-    }, 500);
+    }, 300);
   }
 
   addMessageToChat(message, sender) {
     const messagesContainer = this.chatWidget.querySelector('#chatMessages');
     const messageDiv = document.createElement('div');
     messageDiv.className = `chat-message ${sender}`;
-    messageDiv.textContent = message;
+
+    // Parse markdown for assistant messages
+    if (sender === 'assistant') {
+      messageDiv.innerHTML = this.parseMarkdown(message);
+    } else {
+      messageDiv.textContent = message;
+    }
+
     messagesContainer.appendChild(messageDiv);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  }
+
+  parseMarkdown(text) {
+    try {
+      // Escape HTML to prevent XSS
+      const escaped = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#x27;');
+
+      // Simple markdown parser for basic formatting
+      return escaped
+        // Bold: **text** or __text__
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/__(.*?)__/g, '<strong>$1</strong>')
+        // Italic: *text* or _text_
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/_(.*?)_/g, '<em>$1</em>')
+        // Bullet points: * item or - item
+        .replace(/^[\*\-]\s+(.+)$/gm, '<li>$1</li>')
+        // Wrap consecutive <li> elements in <ul>
+        .replace(/(<li>.*?<\/li>(\s*<li>.*?<\/li>)*)/g, '<ul>$1</ul>')
+        // Line breaks
+        .replace(/\n/g, '<br>');
+    } catch (error) {
+      console.warn('LinkedIn Buddy: Markdown parsing error:', error);
+      return text; // Fallback to plain text
+    }
   }
 
   async handleUserMessage(message) {
@@ -1563,7 +1820,17 @@ class LinkedInBuddy {
     this.addTypingIndicator();
 
     try {
-      // Use RAG search if we have posts and the message is a question
+      // Check if the message is LinkedIn-related or if we should redirect
+      const isLinkedInRelated = this.isLinkedInRelatedQuery(message);
+
+      if (!isLinkedInRelated) {
+        this.removeTypingIndicator();
+        const redirectResponse = this.getRedirectResponse(message);
+        this.addMessageToChat(redirectResponse, 'assistant');
+        return;
+      }
+
+      // Use enhanced RAG search for LinkedIn-related queries
       const response = await this.searchPostsWithRAG(message);
 
       this.removeTypingIndicator();
@@ -1572,23 +1839,61 @@ class LinkedInBuddy {
       console.error('LinkedIn Buddy: Error processing message:', error);
       this.removeTypingIndicator();
 
-      // Fallback to simple responses
-      const lowerMessage = message.toLowerCase();
-      let response = '';
-
-      if (lowerMessage.includes('profile') || lowerMessage.includes('url')) {
-        response = 'I can help you copy your profile URL or analyze profile information. Try using the Quick Actions menu!';
-      } else if (lowerMessage.includes('connection') || lowerMessage.includes('network')) {
-        response = 'I can help you manage your connections and networking activities. What would you like to do?';
-      } else if (lowerMessage.includes('post') || lowerMessage.includes('content')) {
-        response = `I can help you analyze posts, hide sponsored content, or enhance your feed experience. I currently have ${this.postDatabase.length} posts available for analysis.`;
-      } else if (lowerMessage.includes('search')) {
-        response = 'I can enhance your LinkedIn search with additional filters and insights.';
-      } else {
-        response = `I can help you with various LinkedIn tasks like managing connections, analyzing profiles, enhancing your feed, and more. I currently have ${this.postDatabase.length} LinkedIn posts available for analysis. What would you like to know?`;
-      }
-
+      // Fallback to contextual LinkedIn responses
+      const response = this.getContextualLinkedInResponse(message);
       this.addMessageToChat(response, 'assistant');
+    }
+  }
+
+  isLinkedInRelatedQuery(message) {
+    const linkedinKeywords = [
+      'linkedin', 'post', 'feed', 'connection', 'network', 'profile', 'share', 'comment',
+      'like', 'reaction', 'hashtag', 'trend', 'job', 'career', 'professional', 'industry',
+      'company', 'business', 'colleague', 'follow', 'endorsement', 'skill', 'experience',
+      'article', 'content', 'engagement', 'insight', 'analytics', 'message', 'invite',
+      'recommendation', 'who', 'what', 'when', 'where', 'how', 'why', 'trending', 'popular',
+      'recent', 'today', 'discussion', 'topic', 'author', 'writer', 'mention', 'tag'
+    ];
+
+    const lowerMessage = message.toLowerCase();
+
+    // Check for LinkedIn keywords
+    const hasLinkedInKeywords = linkedinKeywords.some(keyword => lowerMessage.includes(keyword));
+
+    // Check for question words (indicates user wants information about current context)
+    const hasQuestionWords = /\b(what|who|when|where|how|why|which|tell|show|find|search|analyze|summarize|explain)\b/i.test(message);
+
+    // Check for current page context references
+    const hasPageContext = /\b(this page|here|current|these posts|this feed|on linkedin)\b/i.test(lowerMessage);
+
+    return hasLinkedInKeywords || hasQuestionWords || hasPageContext;
+  }
+
+  getRedirectResponse(message) {
+    const responses = [
+      "I focus on LinkedIn content! Try asking about posts or trends here.",
+      "Let's talk LinkedIn! Ask me about the posts on this page.",
+      "I analyze LinkedIn feeds. What would you like to know about these posts?",
+      "I'm your LinkedIn assistant. Ask about posts, trends, or insights!",
+    ];
+
+    return responses[Math.floor(Math.random() * responses.length)] +
+      `\n\nTry: "What's trending?" • I have ${this.postDatabase.length} posts to analyze`;
+  }
+
+  getContextualLinkedInResponse(message) {
+    const lowerMessage = message.toLowerCase();
+
+    if (lowerMessage.includes('profile') || lowerMessage.includes('url')) {
+      return 'I help with profile tasks! Check the extension features for profile tools.';
+    } else if (lowerMessage.includes('connection') || lowerMessage.includes('network')) {
+      return `Analyzing ${this.postDatabase.length} posts for networking insights. What would you like to know?`;
+    } else if (lowerMessage.includes('post') || lowerMessage.includes('content') || lowerMessage.includes('feed')) {
+      return `I'm tracking ${this.postDatabase.length} posts. Ask about trends or specific topics!`;
+    } else if (lowerMessage.includes('search') || lowerMessage.includes('find')) {
+      return 'I can search these posts! Try "What are people discussing?" or "Find AI posts".';
+    } else {
+      return `LinkedIn assistant ready! I have ${this.postDatabase.length} posts to analyze. What interests you?`;
     }
   }
 
@@ -1603,6 +1908,11 @@ class LinkedInBuddy {
 
   // Post extraction and RAG search functionality
   startPostExtraction() {
+    // Only start if chat assistant is enabled and on homepage
+    if (!this.settings.chatAssistant || !this.isHomepage()) {
+      return;
+    }
+
     // Extract posts immediately
     this.extractCurrentPosts();
 
@@ -1610,14 +1920,37 @@ class LinkedInBuddy {
     this.setupPostObserver();
 
     // Sync posts every 30 seconds
-    setInterval(() => {
-      this.extractCurrentPosts();
+    this.extractionInterval = setInterval(() => {
+      if (this.settings.chatAssistant && this.isHomepage()) {
+        this.extractCurrentPosts();
+      }
     }, 30000);
   }
 
+  stopPostExtraction() {
+    if (this.extractionInterval) {
+      clearInterval(this.extractionInterval);
+      this.extractionInterval = null;
+    }
+
+    if (this.postObserver) {
+      this.postObserver.disconnect();
+      this.postObserver = null;
+    }
+  }
+
   setupPostObserver() {
+    if (this.postObserver) {
+      this.postObserver.disconnect();
+    }
+
     // Reuse existing feed observation logic
-    const postObserver = new MutationObserver((mutations) => {
+    this.postObserver = new MutationObserver((mutations) => {
+      // Skip if chat assistant is disabled or not on homepage
+      if (!this.settings.chatAssistant || !this.isHomepage()) {
+        return;
+      }
+
       let shouldExtract = false;
 
       mutations.forEach((mutation) => {
@@ -1639,7 +1972,7 @@ class LinkedInBuddy {
       }
     });
 
-    postObserver.observe(document.body, {
+    this.postObserver.observe(document.body, {
       childList: true,
       subtree: true
     });
@@ -1647,13 +1980,19 @@ class LinkedInBuddy {
 
   extractCurrentPosts() {
     try {
+      // Only extract posts if chat assistant is enabled AND on homepage/feed page
+      if (!this.settings.chatAssistant || !this.isHomepage()) {
+        console.log('LinkedIn Buddy: Skipping post extraction - chat disabled or not on homepage/feed');
+        return;
+      }
+
       const feedPosts = document.querySelectorAll('.feed-shared-update-v2');
       const extractedPosts = [];
 
       feedPosts.forEach((post, index) => {
         try {
-          const postData = this.extractPostData(post);
-          if (postData && postData.text && postData.text.length > 20) {
+          const postData = this.extractComprehensivePostData(post);
+          if (postData && (postData.text.length > 15 || postData.comments.length > 0)) {
             extractedPosts.push(postData);
           }
         } catch (error) {
@@ -1666,10 +2005,16 @@ class LinkedInBuddy {
           .filter((post, index, array) =>
             index === array.findIndex(p => p.id === post.id || p.text === post.text)
           )
-          .slice(0, 50); // Keep only recent 50 posts
+          .slice(0, 75); // Keep more posts for better context
 
         // Sync with API
         this.syncPostsWithAPI(extractedPosts);
+
+        // Update UI counter
+        this.updatePostCounter();
+
+        // Update welcome message with new posts
+        this.updateWelcomeMessage();
 
         console.log(`LinkedIn Buddy: Extracted ${extractedPosts.length} new posts, total: ${this.postDatabase.length}`);
       }
@@ -1678,65 +2023,119 @@ class LinkedInBuddy {
     }
   }
 
-  extractPostData(postElement) {
+  extractComprehensivePostData(postElement) {
     try {
       const postId = postElement.getAttribute('data-id') ||
         postElement.querySelector('[data-id]')?.getAttribute('data-id') ||
         `post_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-      // Extract author information
+      // Extract author information with more details
       const authorElement = postElement.querySelector('.update-components-actor__name');
       const author = authorElement?.textContent?.trim() || 'Unknown Author';
 
-      // Extract post text content
+      const authorTitleElement = postElement.querySelector('.update-components-actor__description');
+      const authorTitle = authorTitleElement?.textContent?.trim() || '';
+
+      // Extract post text content more comprehensively
       const textElement = postElement.querySelector('.feed-shared-text__text-view') ||
         postElement.querySelector('.update-components-text') ||
         postElement.querySelector('.feed-shared-update-v2__description');
 
       let text = '';
       if (textElement) {
-        // Get text content and clean it up
-        text = textElement.textContent?.trim() || '';
-        // Remove "see more" and other UI text
-        text = text.replace(/\.\.\.see more$/, '').replace(/see more$/, '').trim();
+        // Get full expanded text if available
+        const expandedText = textElement.querySelector('.feed-shared-text span[dir]');
+        text = expandedText?.textContent?.trim() || textElement.textContent?.trim() || '';
+        // Clean up UI text
+        text = text.replace(/\.\.\.see more$/, '').replace(/see more$/, '').replace(/see less$/, '').trim();
       }
 
-      // Extract hashtags
+      // Extract article/link content if present
+      let articleTitle = '';
+      let articleDescription = '';
+      const articleElement = postElement.querySelector('.update-components-article');
+      if (articleElement) {
+        const titleEl = articleElement.querySelector('.update-components-article__headline');
+        const descEl = articleElement.querySelector('.update-components-article__description');
+        articleTitle = titleEl?.textContent?.trim() || '';
+        articleDescription = descEl?.textContent?.trim() || '';
+      }
+
+      // Extract hashtags and mentions
       const hashtagElements = postElement.querySelectorAll('a[href*="hashtag/"]');
       const hashtags = Array.from(hashtagElements).map(el => el.textContent.trim()).filter(Boolean);
 
-      // Extract engagement metrics
-      let engagement = '';
+      const mentionElements = postElement.querySelectorAll('a[href*="/in/"]');
+      const mentions = Array.from(mentionElements).map(el => el.textContent.trim()).filter(Boolean);
+
+      // Extract comments (first few visible ones)
+      const comments = [];
+      const commentElements = postElement.querySelectorAll('.comments-comment-item');
+      commentElements.forEach((comment, index) => {
+        if (index < 3) { // Limit to first 3 comments
+          const commentAuthor = comment.querySelector('.comments-comment-item__main-content .hoverable-link-text')?.textContent?.trim();
+          const commentText = comment.querySelector('.comments-comment-item-content-body')?.textContent?.trim();
+          if (commentAuthor && commentText) {
+            comments.push({
+              author: commentAuthor,
+              text: commentText.substring(0, 200), // Limit comment length
+            });
+          }
+        }
+      });
+
+      // Extract engagement metrics with more detail
       const reactionsElement = postElement.querySelector('.social-counts-reactions');
       const commentsElement = postElement.querySelector('.social-counts-comments');
-      const sharesElement = postElement.querySelector('.social-counts-shares');
+      const repostsElement = postElement.querySelector('.social-counts-reposts');
 
-      if (reactionsElement || commentsElement || sharesElement) {
-        engagement = `${reactionsElement?.textContent?.trim() || '0'} reactions, ${commentsElement?.textContent?.trim() || '0'} comments, ${sharesElement?.textContent?.trim() || '0'} shares`;
-      }
+      const reactions = reactionsElement?.textContent?.trim() || '0';
+      const commentCount = commentsElement?.textContent?.trim() || '0';
+      const reposts = repostsElement?.textContent?.trim() || '0';
 
-      // Extract post type/category
-      let category = 'post';
+      // Extract post timing
+      const timeElement = postElement.querySelector('time') || postElement.querySelector('.update-components-actor__sub-description time');
+      const postTime = timeElement?.getAttribute('datetime') || timeElement?.textContent?.trim() || '';
+
+      // Determine post type with more categories
+      let category = 'text_post';
       if (postElement.querySelector('.update-components-article')) {
-        category = 'article';
+        category = 'article_share';
       } else if (postElement.querySelector('.update-components-image')) {
         category = 'image_post';
       } else if (postElement.querySelector('.update-components-video')) {
         category = 'video_post';
+      } else if (postElement.querySelector('.update-components-document')) {
+        category = 'document_post';
+      } else if (postElement.querySelector('[data-urn*="reshare"]')) {
+        category = 'repost';
       }
+
+      // Check if this is a company post
+      const isCompanyPost = postElement.querySelector('.update-components-actor__image img[alt*="logo"]') ||
+        postElement.querySelector('.entityPhoto-circle-4') !== null;
 
       return {
         id: postId,
         author,
+        authorTitle,
+        isCompanyPost,
         text,
+        articleTitle,
+        articleDescription,
         hashtags,
-        engagement,
+        mentions,
+        comments,
+        reactions,
+        commentCount,
+        reposts,
+        postTime,
         category,
         timestamp: new Date().toISOString(),
         url: window.location.href,
       };
     } catch (error) {
-      console.warn('LinkedIn Buddy: Error extracting post data:', error);
+      console.warn('LinkedIn Buddy: Error extracting comprehensive post data:', error);
       return null;
     }
   }
@@ -1744,6 +2143,8 @@ class LinkedInBuddy {
   async syncPostsWithAPI(posts) {
     try {
       if (posts.length === 0) return;
+
+      console.log(`LinkedIn Buddy: Attempting to sync ${posts.length} posts to ${this.apiBaseUrl}/api/posts`);
 
       const response = await fetch(`${this.apiBaseUrl}/api/posts`, {
         method: 'POST',
@@ -1755,18 +2156,22 @@ class LinkedInBuddy {
 
       if (response.ok) {
         const result = await response.json();
-        console.log(`LinkedIn Buddy: Synced ${result.postsReceived} posts with API`);
+        console.log(`LinkedIn Buddy: ✅ Successfully synced ${result.postsReceived} posts with API`);
         this.lastPostSync = Date.now();
       } else {
-        console.warn('LinkedIn Buddy: Failed to sync posts with API:', response.status);
+        console.warn(`LinkedIn Buddy: ❌ Failed to sync posts with API. Status: ${response.status}, StatusText: ${response.statusText}`);
       }
     } catch (error) {
-      console.warn('LinkedIn Buddy: API sync failed (server might be offline):', error.message);
+      console.warn(`LinkedIn Buddy: ❌ API sync failed. Error: ${error.message}`);
+      console.warn('LinkedIn Buddy: Make sure the Node.js server is running on http://localhost:3000');
+      console.warn('LinkedIn Buddy: Check Chrome extension permissions for localhost access');
     }
   }
 
   async searchPostsWithRAG(query) {
     try {
+      console.log(`LinkedIn Buddy: Attempting RAG search for: "${query}"`);
+
       const response = await fetch(`${this.apiBaseUrl}/api/chat`, {
         method: 'POST',
         headers: {
@@ -1780,12 +2185,15 @@ class LinkedInBuddy {
 
       if (response.ok) {
         const result = await response.json();
+        console.log('LinkedIn Buddy: ✅ RAG search successful');
         return result.response || 'I found some information but couldn\'t generate a response.';
       } else {
+        console.warn(`LinkedIn Buddy: ❌ RAG search API failed. Status: ${response.status}, StatusText: ${response.statusText}`);
         throw new Error(`API request failed: ${response.status}`);
       }
     } catch (error) {
-      console.warn('LinkedIn Buddy: RAG search failed:', error);
+      console.warn(`LinkedIn Buddy: ❌ RAG search failed: ${error.message}`);
+      console.warn('LinkedIn Buddy: Falling back to local search...');
 
       // Fallback to local search if API is unavailable
       return this.localPostSearch(query);
@@ -1794,27 +2202,64 @@ class LinkedInBuddy {
 
   localPostSearch(query) {
     if (this.postDatabase.length === 0) {
-      return 'I don\'t have any LinkedIn posts available for analysis yet. Please wait a moment for posts to be extracted from the page.';
+      return 'I don\'t have any LinkedIn posts available for analysis yet. Please wait a moment for posts to be extracted from the page, then try asking again!';
     }
 
     const lowerQuery = query.toLowerCase();
-    const relevantPosts = this.postDatabase.filter(post =>
-      post.text.toLowerCase().includes(lowerQuery) ||
-      post.author.toLowerCase().includes(lowerQuery) ||
-      post.hashtags.some(tag => tag.toLowerCase().includes(lowerQuery))
-    ).slice(0, 3);
+
+    // Enhanced search across all post content
+    const relevantPosts = this.postDatabase.filter(post => {
+      const searchText = [
+        post.text,
+        post.author,
+        post.authorTitle,
+        post.articleTitle,
+        post.articleDescription,
+        ...(post.hashtags || []),
+        ...(post.mentions || []),
+        ...(post.comments || []).map(c => `${c.author}: ${c.text}`)
+      ].join(' ').toLowerCase();
+
+      return searchText.includes(lowerQuery);
+    }).slice(0, 4);
 
     if (relevantPosts.length === 0) {
-      return `I searched through ${this.postDatabase.length} LinkedIn posts but couldn't find content directly related to "${query}". Try asking about different topics or more general questions.`;
+      // Provide helpful suggestions based on available content
+      const availableTopics = this.extractAvailableTopics();
+      return `No results for "${query}" in ${this.postDatabase.length} posts.
+
+Try these topics: ${availableTopics.slice(0, 3).join(', ')}
+
+Or ask: "What's trending?" • "Show me AI posts"`;
     }
 
-    let response = `I found ${relevantPosts.length} relevant posts about "${query}":\n\n`;
+    let response = `Found ${relevantPosts.length} posts about "${query}":\n\n`;
 
     relevantPosts.forEach((post, index) => {
-      response += `${index + 1}. ${post.author}: ${post.text.substring(0, 150)}${post.text.length > 150 ? '...' : ''}\n\n`;
+      const author = post.author + (post.authorTitle ? ` (${post.authorTitle})` : '');
+      const content = post.text || post.articleTitle || 'Shared content';
+      const preview = content.substring(0, 100) + (content.length > 100 ? '...' : '');
+
+      response += `• ${author}: ${preview}\n`;
     });
 
-    return response;
+    return response + `\n${relevantPosts.length} of ${this.postDatabase.length} posts shown.`;
+  }
+
+  extractAvailableTopics() {
+    const allHashtags = this.postDatabase
+      .flatMap(post => post.hashtags || [])
+      .filter(tag => tag.length > 1)
+      .map(tag => tag.replace('#', '').toLowerCase())
+      .reduce((acc, tag) => {
+        acc[tag] = (acc[tag] || 0) + 1;
+        return acc;
+      }, {});
+
+    return Object.entries(allHashtags)
+      .sort(([, a], [, b]) => b - a)
+      .map(([tag]) => tag)
+      .slice(0, 10);
   }
 
   addTypingIndicator() {
@@ -1837,6 +2282,176 @@ class LinkedInBuddy {
     if (typingIndicator) {
       typingIndicator.remove();
     }
+  }
+
+  updatePostCounter() {
+    const counter = this.chatWidget?.querySelector('#postCounter .post-count');
+    if (counter) {
+      counter.textContent = this.postDatabase.length.toString();
+
+      // Add a subtle animation when count updates
+      counter.style.transform = 'scale(1.1)';
+      setTimeout(() => {
+        counter.style.transform = 'scale(1)';
+      }, 200);
+    }
+  }
+
+  updateWelcomeMessage() {
+    if (!this.isHomepage() || !this.chatWidget || !this.settings.chatAssistant) return;
+
+    const welcomeElement = this.chatWidget.querySelector('#welcomeMessage');
+    if (!welcomeElement) return;
+
+    try {
+      // Extract first 5 posts for summary
+      const feedPosts = document.querySelectorAll('.feed-shared-update-v2');
+      const firstFivePosts = Array.from(feedPosts).slice(0, 5);
+
+      if (firstFivePosts.length === 0) {
+        return; // Keep default message if no posts found
+      }
+
+      let welcomeHTML = '👋 Hi! I\'m LinkedIn Buddy. Here are the latest posts:<br><br>';
+
+      firstFivePosts.forEach((post, index) => {
+        try {
+          const postData = this.extractPostSummary(post);
+          if (postData) {
+            // Ensure this post is in our database for detailed view
+            const fullPostData = this.extractComprehensivePostData(post);
+            if (fullPostData && !this.postDatabase.find(p => p.id === fullPostData.id)) {
+              this.postDatabase.unshift(fullPostData);
+            }
+
+            const postNumber = index + 1;
+            welcomeHTML += `<strong>${postNumber}.</strong> <a href="#" class="post-link" data-post-id="${postData.id}" style="color: #0077b5; text-decoration: underline;">${postData.summary}</a><br><br>`;
+          }
+        } catch (error) {
+          console.warn('LinkedIn Buddy: Error extracting post summary:', error);
+        }
+      });
+
+      welcomeHTML += 'Want to know more about any post? Just click it or ask me questions!';
+
+      welcomeElement.innerHTML = welcomeHTML;
+
+      // Add click handlers for post links
+      this.addPostLinkHandlers();
+
+    } catch (error) {
+      console.warn('LinkedIn Buddy: Error updating welcome message:', error);
+    }
+  }
+
+  extractPostSummary(postElement) {
+    try {
+      // Get post URL/ID
+      const postLink = postElement.querySelector('a[href*="/posts/"], a[href*="/feed/update/"]');
+      const postId = postElement.getAttribute('data-id') ||
+        postElement.querySelector('[data-id]')?.getAttribute('data-id') ||
+        `post_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      // Extract author
+      const authorElement = postElement.querySelector('.update-components-actor__name');
+      const author = authorElement?.textContent?.trim() || 'Someone';
+
+      // Extract main content
+      const textElement = postElement.querySelector('.feed-shared-text__text-view') ||
+        postElement.querySelector('.update-components-text') ||
+        postElement.querySelector('.feed-shared-update-v2__description');
+
+      let text = '';
+      if (textElement) {
+        text = textElement.textContent?.trim() || '';
+        text = text.replace(/\.\.\.see more$/, '').replace(/see more$/, '').trim();
+      }
+
+      // Extract article title if it's a shared article
+      const articleElement = postElement.querySelector('.update-components-article');
+      let articleTitle = '';
+      if (articleElement) {
+        const titleEl = articleElement.querySelector('.update-components-article__headline');
+        articleTitle = titleEl?.textContent?.trim() || '';
+      }
+
+      // Generate 1-sentence summary
+      let summary = '';
+      if (articleTitle) {
+        summary = `${author} shared: "${articleTitle}"`;
+      } else if (text) {
+        // Create a concise summary (first 60 characters + "...")
+        const shortText = text.length > 60 ? text.substring(0, 60) + '...' : text;
+        summary = `${author}: ${shortText}`;
+      } else {
+        summary = `${author} shared a post`;
+      }
+
+      return {
+        id: postId,
+        summary: summary,
+        url: postLink?.href || '#',
+        fullText: text,
+        author: author,
+        articleTitle: articleTitle
+      };
+
+    } catch (error) {
+      console.warn('LinkedIn Buddy: Error extracting post summary:', error);
+      return null;
+    }
+  }
+
+  addPostLinkHandlers() {
+    const postLinks = this.chatWidget.querySelectorAll('.post-link');
+    postLinks.forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        const postId = link.getAttribute('data-post-id');
+        this.handlePostClick(postId, link.textContent);
+      });
+    });
+  }
+
+  handlePostClick(postId, summary) {
+    // Add user message showing which post they clicked
+    this.addMessageToChat(`Tell me more about: ${summary}`, 'user');
+
+    // Add typing indicator
+    this.addTypingIndicator();
+
+    // Find the full post data
+    const fullPost = this.postDatabase.find(post => post.id === postId);
+
+    setTimeout(() => {
+      this.removeTypingIndicator();
+
+      if (fullPost) {
+        let response = `**${fullPost.author}** ${fullPost.authorTitle ? `(${fullPost.authorTitle})` : ''}:\n\n`;
+
+        if (fullPost.articleTitle) {
+          response += `**Article:** ${fullPost.articleTitle}\n\n`;
+        }
+
+        if (fullPost.text) {
+          const truncatedText = fullPost.text.length > 200 ?
+            fullPost.text.substring(0, 200) + '...' : fullPost.text;
+          response += `${truncatedText}\n\n`;
+        }
+
+        if (fullPost.hashtags && fullPost.hashtags.length > 0) {
+          response += `**Tags:** ${fullPost.hashtags.slice(0, 3).join(', ')}\n\n`;
+        }
+
+        if (fullPost.reactions || fullPost.commentCount) {
+          response += `**Engagement:** ${fullPost.reactions || '0'} reactions, ${fullPost.commentCount || '0'} comments`;
+        }
+
+        this.addMessageToChat(response, 'assistant');
+      } else {
+        this.addMessageToChat('I need to extract more details about this post. Try asking me a specific question about it!', 'assistant');
+      }
+    }, 800);
   }
 
   enhanceFeedItems() {
@@ -1871,11 +2486,15 @@ class LinkedInBuddy {
   }
 
   toggleChatAssistant(enabled) {
-    if (enabled) {
+    if (enabled && this.isHomepage()) {
       this.toggleButton.style.display = 'flex';
+      // Start post extraction when chat is enabled
+      this.startPostExtraction();
     } else {
       this.toggleButton.style.display = 'none';
       this.chatWidget.classList.remove('visible');
+      // Stop post extraction when chat is disabled
+      this.stopPostExtraction();
     }
   }
 
@@ -1906,6 +2525,12 @@ class LinkedInBuddy {
   }
 
   hideSponsoredPosts() {
+    // Only hide posts on homepage/feed page
+    if (!this.isHomepage() || this.isNotificationsPage()) {
+      console.log('LinkedIn Buddy: Skipping sponsored post hiding - not on homepage/feed');
+      return;
+    }
+
     let hiddenCount = 0;
 
     // Find all feed posts
@@ -1963,6 +2588,12 @@ class LinkedInBuddy {
   }
 
   hideRecommendedPosts() {
+    // Only hide posts on homepage/feed page
+    if (!this.isHomepage() || this.isNotificationsPage()) {
+      console.log('LinkedIn Buddy: Skipping recommended post hiding - not on homepage/feed');
+      return;
+    }
+
     let hiddenCount = 0;
 
     // Find posts with "Recommended for you" header
@@ -2012,7 +2643,7 @@ class LinkedInBuddy {
   }
 
   toggleAutoExpandPosts(enabled) {
-    if (enabled && this.isHomepage()) {
+    if (enabled && this.isHomepage() && !this.isNotificationsPage()) {
       document.body.classList.add('linkedin-buddy-auto-expand');
       this.triggerContentLoad();
       this.removeEllipsisSpans();
