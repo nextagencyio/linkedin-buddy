@@ -8,6 +8,9 @@ class LinkedInBuddy {
     this.imageObserver = null;
     this.sponsoredObserver = null;
     this.recommendedObserver = null;
+    this.apiBaseUrl = 'http://localhost:3000';
+    this.postDatabase = [];
+    this.lastPostSync = 0;
     this.settings = {
       chatAssistant: false,
       autoExpandPosts: true,
@@ -649,15 +652,38 @@ class LinkedInBuddy {
       this.sponsoredObserver.disconnect();
     }
 
-    this.sponsoredObserver = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        mutation.addedNodes.forEach((node) => {
-          if (node.nodeType === 1) { // Element node
-            this.hideNewSponsoredPosts(node);
-          }
-        });
-      });
-    });
+    // Throttle processing to avoid interference
+    let sponsoredTimeout = null;
+    const throttledSponsoredProcess = (mutations) => {
+      if (sponsoredTimeout) {
+        clearTimeout(sponsoredTimeout);
+      }
+
+      sponsoredTimeout = setTimeout(() => {
+        try {
+          mutations.forEach((mutation) => {
+            // Only process feed-related mutations
+            const target = mutation.target;
+            if (!target || !target.closest) return;
+
+            const feedContainer = target.closest('.scaffold-layout__main') ||
+              target.closest('.feed-container-v2');
+
+            if (!feedContainer) return;
+
+            mutation.addedNodes.forEach((node) => {
+              if (node.nodeType === 1) { // Element node
+                this.hideNewSponsoredPosts(node);
+              }
+            });
+          });
+        } catch (error) {
+          console.warn('LinkedIn Buddy: Error in sponsored posts observer:', error);
+        }
+      }, 200);
+    };
+
+    this.sponsoredObserver = new MutationObserver(throttledSponsoredProcess);
 
     this.sponsoredObserver.observe(document.body, {
       childList: true,
@@ -665,7 +691,9 @@ class LinkedInBuddy {
     });
 
     // Also hide existing sponsored posts
-    this.hideNewSponsoredPosts(document);
+    setTimeout(() => {
+      this.hideNewSponsoredPosts(document);
+    }, 1500);
   }
 
   hideNewSponsoredPosts(container) {
@@ -739,15 +767,38 @@ class LinkedInBuddy {
       this.recommendedObserver.disconnect();
     }
 
-    this.recommendedObserver = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        mutation.addedNodes.forEach((node) => {
-          if (node.nodeType === 1) { // Element node
-            this.hideNewRecommendedPosts(node);
-          }
-        });
-      });
-    });
+    // Throttle processing to avoid interference
+    let recommendedTimeout = null;
+    const throttledRecommendedProcess = (mutations) => {
+      if (recommendedTimeout) {
+        clearTimeout(recommendedTimeout);
+      }
+
+      recommendedTimeout = setTimeout(() => {
+        try {
+          mutations.forEach((mutation) => {
+            // Only process feed-related mutations
+            const target = mutation.target;
+            if (!target || !target.closest) return;
+
+            const feedContainer = target.closest('.scaffold-layout__main') ||
+              target.closest('.feed-container-v2');
+
+            if (!feedContainer) return;
+
+            mutation.addedNodes.forEach((node) => {
+              if (node.nodeType === 1) { // Element node
+                this.hideNewRecommendedPosts(node);
+              }
+            });
+          });
+        } catch (error) {
+          console.warn('LinkedIn Buddy: Error in recommended posts observer:', error);
+        }
+      }, 250);
+    };
+
+    this.recommendedObserver = new MutationObserver(throttledRecommendedProcess);
 
     this.recommendedObserver.observe(document.body, {
       childList: true,
@@ -755,7 +806,9 @@ class LinkedInBuddy {
     });
 
     // Also hide existing recommended posts
-    this.hideNewRecommendedPosts(document);
+    setTimeout(() => {
+      this.hideNewRecommendedPosts(document);
+    }, 2000);
   }
 
   stopAutoHideRecommended() {
@@ -845,6 +898,10 @@ class LinkedInBuddy {
     this.setupUrlChangeListener();
     // Clean up any existing stats injections
     this.cleanupStatsInjections();
+
+    // Start extracting and syncing post content
+    this.startPostExtraction();
+
     this.isInitialized = true;
   }
 
@@ -1034,15 +1091,39 @@ class LinkedInBuddy {
       this.imageObserver.disconnect();
     }
 
-    this.imageObserver = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        mutation.addedNodes.forEach((node) => {
-          if (node.nodeType === 1) { // Element node
-            this.hideImagesInNode(node);
-          }
-        });
-      });
-    });
+    // Throttle the observer to prevent excessive processing
+    let processingTimeout = null;
+    const throttledProcess = (mutations) => {
+      if (processingTimeout) {
+        clearTimeout(processingTimeout);
+      }
+
+      processingTimeout = setTimeout(() => {
+        try {
+          mutations.forEach((mutation) => {
+            // Only process mutations in the main feed area
+            const target = mutation.target;
+            if (!target || !target.closest) return;
+
+            const feedContainer = target.closest('.scaffold-layout__main') ||
+              target.closest('.feed-container-v2') ||
+              target.closest('.application-outlet');
+
+            if (!feedContainer) return;
+
+            mutation.addedNodes.forEach((node) => {
+              if (node.nodeType === 1) { // Element node
+                this.hideImagesInNode(node);
+              }
+            });
+          });
+        } catch (error) {
+          console.warn('LinkedIn Buddy: Error in image hiding observer:', error);
+        }
+      }, 100); // 100ms throttle
+    };
+
+    this.imageObserver = new MutationObserver(throttledProcess);
 
     this.imageObserver.observe(document.body, {
       childList: true,
@@ -1050,7 +1131,9 @@ class LinkedInBuddy {
     });
 
     // Hide existing images
-    this.hideImagesInNode(document.body);
+    setTimeout(() => {
+      this.hideImagesInNode(document.body);
+    }, 1000);
   }
 
   stopImageHiding() {
@@ -1061,50 +1144,69 @@ class LinkedInBuddy {
   }
 
   hideImagesInNode(node) {
-    // Find image containers in the node
-    const imageContainers = node.querySelectorAll ?
-      node.querySelectorAll('.update-components-image') : [];
-
-    imageContainers.forEach(container => {
-      if (container.querySelector('.linkedin-buddy-show-image-btn')) {
-        return; // Already processed
+    try {
+      // Skip if node is not a proper element
+      if (!node || !node.nodeType || node.nodeType !== 1) {
+        return;
       }
 
-      const images = container.querySelectorAll('.update-components-image__image');
-      if (images.length > 0) {
-        this.hideImagesInContainer(container, images);
-      }
-    });
-
-    // Find document/carousel containers in the node
-    const documentContainers = node.querySelectorAll ?
-      node.querySelectorAll('.update-components-document__container') : [];
-
-    documentContainers.forEach(container => {
-      if (container.querySelector('.linkedin-buddy-show-image-btn')) {
-        return; // Already processed
+      // Skip LinkedIn system containers to avoid interference
+      if (node.classList && (
+        node.classList.contains('application-outlet') ||
+        node.classList.contains('voyager-application') ||
+        node.classList.contains('notifications-container') ||
+        node.getAttribute('data-app-name')
+      )) {
+        return;
       }
 
-      const iframe = container.querySelector('iframe');
-      if (iframe) {
-        this.hideDocumentContainer(container, iframe);
-      }
-    });
+      // Find image containers in the node
+      const imageContainers = node.querySelectorAll ?
+        node.querySelectorAll('.update-components-image') : [];
 
-    // Also check if the node itself is an image container
-    if (node.classList && node.classList.contains('update-components-image')) {
-      const images = node.querySelectorAll('.update-components-image__image');
-      if (images.length > 0 && !node.querySelector('.linkedin-buddy-show-image-btn')) {
-        this.hideImagesInContainer(node, images);
-      }
-    }
+      imageContainers.forEach(container => {
+        if (container.querySelector('.linkedin-buddy-show-image-btn')) {
+          return; // Already processed
+        }
 
-    // Also check if the node itself is a document container
-    if (node.classList && node.classList.contains('update-components-document__container')) {
-      const iframe = node.querySelector('iframe');
-      if (iframe && !node.querySelector('.linkedin-buddy-show-image-btn')) {
-        this.hideDocumentContainer(node, iframe);
+        const images = container.querySelectorAll('.update-components-image__image');
+        if (images.length > 0) {
+          this.hideImagesInContainer(container, images);
+        }
+      });
+
+      // Find document/carousel containers in the node
+      const documentContainers = node.querySelectorAll ?
+        node.querySelectorAll('.update-components-document__container') : [];
+
+      documentContainers.forEach(container => {
+        if (container.querySelector('.linkedin-buddy-show-image-btn')) {
+          return; // Already processed
+        }
+
+        const iframe = container.querySelector('iframe');
+        if (iframe) {
+          this.hideDocumentContainer(container, iframe);
+        }
+      });
+
+      // Also check if the node itself is an image container
+      if (node.classList && node.classList.contains('update-components-image')) {
+        const images = node.querySelectorAll('.update-components-image__image');
+        if (images.length > 0 && !node.querySelector('.linkedin-buddy-show-image-btn')) {
+          this.hideImagesInContainer(node, images);
+        }
       }
+
+      // Also check if the node itself is a document container
+      if (node.classList && node.classList.contains('update-components-document__container')) {
+        const iframe = node.querySelector('iframe');
+        if (iframe && !node.querySelector('.linkedin-buddy-show-image-btn')) {
+          this.hideDocumentContainer(node, iframe);
+        }
+      }
+    } catch (error) {
+      console.warn('LinkedIn Buddy: Error processing node for image hiding:', error);
     }
   }
 
@@ -1456,23 +1558,38 @@ class LinkedInBuddy {
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
   }
 
-  handleUserMessage(message) {
-    const lowerMessage = message.toLowerCase();
-    let response = '';
+  async handleUserMessage(message) {
+    // Add typing indicator
+    this.addTypingIndicator();
 
-    if (lowerMessage.includes('profile') || lowerMessage.includes('url')) {
-      response = 'I can help you copy your profile URL or analyze profile information. Try using the Quick Actions menu!';
-    } else if (lowerMessage.includes('connection') || lowerMessage.includes('network')) {
-      response = 'I can help you manage your connections and networking activities. What would you like to do?';
-    } else if (lowerMessage.includes('post') || lowerMessage.includes('content')) {
-      response = 'I can help you analyze posts, hide sponsored content, or enhance your feed experience.';
-    } else if (lowerMessage.includes('search')) {
-      response = 'I can enhance your LinkedIn search with additional filters and insights.';
-    } else {
-      response = 'I can help you with various LinkedIn tasks like managing connections, analyzing profiles, enhancing your feed, and more. What would you like to do?';
+    try {
+      // Use RAG search if we have posts and the message is a question
+      const response = await this.searchPostsWithRAG(message);
+
+      this.removeTypingIndicator();
+      this.addMessageToChat(response, 'assistant');
+    } catch (error) {
+      console.error('LinkedIn Buddy: Error processing message:', error);
+      this.removeTypingIndicator();
+
+      // Fallback to simple responses
+      const lowerMessage = message.toLowerCase();
+      let response = '';
+
+      if (lowerMessage.includes('profile') || lowerMessage.includes('url')) {
+        response = 'I can help you copy your profile URL or analyze profile information. Try using the Quick Actions menu!';
+      } else if (lowerMessage.includes('connection') || lowerMessage.includes('network')) {
+        response = 'I can help you manage your connections and networking activities. What would you like to do?';
+      } else if (lowerMessage.includes('post') || lowerMessage.includes('content')) {
+        response = `I can help you analyze posts, hide sponsored content, or enhance your feed experience. I currently have ${this.postDatabase.length} posts available for analysis.`;
+      } else if (lowerMessage.includes('search')) {
+        response = 'I can enhance your LinkedIn search with additional filters and insights.';
+      } else {
+        response = `I can help you with various LinkedIn tasks like managing connections, analyzing profiles, enhancing your feed, and more. I currently have ${this.postDatabase.length} LinkedIn posts available for analysis. What would you like to know?`;
+      }
+
+      this.addMessageToChat(response, 'assistant');
     }
-
-    this.addMessageToChat(response, 'assistant');
   }
 
   toggleEnhancedFeed(enabled) {
@@ -1481,6 +1598,244 @@ class LinkedInBuddy {
       this.enhanceFeedItems();
     } else {
       document.body.classList.remove('linkedin-buddy-enhanced');
+    }
+  }
+
+  // Post extraction and RAG search functionality
+  startPostExtraction() {
+    // Extract posts immediately
+    this.extractCurrentPosts();
+
+    // Set up observer for new posts
+    this.setupPostObserver();
+
+    // Sync posts every 30 seconds
+    setInterval(() => {
+      this.extractCurrentPosts();
+    }, 30000);
+  }
+
+  setupPostObserver() {
+    // Reuse existing feed observation logic
+    const postObserver = new MutationObserver((mutations) => {
+      let shouldExtract = false;
+
+      mutations.forEach((mutation) => {
+        mutation.addedNodes.forEach((node) => {
+          if (node.nodeType === 1 &&
+            (node.classList?.contains('feed-shared-update-v2') ||
+              node.querySelector?.('.feed-shared-update-v2'))) {
+            shouldExtract = true;
+          }
+        });
+      });
+
+      if (shouldExtract) {
+        // Debounce extraction
+        clearTimeout(this.extractTimeout);
+        this.extractTimeout = setTimeout(() => {
+          this.extractCurrentPosts();
+        }, 2000);
+      }
+    });
+
+    postObserver.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+  }
+
+  extractCurrentPosts() {
+    try {
+      const feedPosts = document.querySelectorAll('.feed-shared-update-v2');
+      const extractedPosts = [];
+
+      feedPosts.forEach((post, index) => {
+        try {
+          const postData = this.extractPostData(post);
+          if (postData && postData.text && postData.text.length > 20) {
+            extractedPosts.push(postData);
+          }
+        } catch (error) {
+          console.warn('LinkedIn Buddy: Error extracting post:', error);
+        }
+      });
+
+      if (extractedPosts.length > 0) {
+        this.postDatabase = [...extractedPosts, ...this.postDatabase]
+          .filter((post, index, array) =>
+            index === array.findIndex(p => p.id === post.id || p.text === post.text)
+          )
+          .slice(0, 50); // Keep only recent 50 posts
+
+        // Sync with API
+        this.syncPostsWithAPI(extractedPosts);
+
+        console.log(`LinkedIn Buddy: Extracted ${extractedPosts.length} new posts, total: ${this.postDatabase.length}`);
+      }
+    } catch (error) {
+      console.error('LinkedIn Buddy: Error in post extraction:', error);
+    }
+  }
+
+  extractPostData(postElement) {
+    try {
+      const postId = postElement.getAttribute('data-id') ||
+        postElement.querySelector('[data-id]')?.getAttribute('data-id') ||
+        `post_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      // Extract author information
+      const authorElement = postElement.querySelector('.update-components-actor__name');
+      const author = authorElement?.textContent?.trim() || 'Unknown Author';
+
+      // Extract post text content
+      const textElement = postElement.querySelector('.feed-shared-text__text-view') ||
+        postElement.querySelector('.update-components-text') ||
+        postElement.querySelector('.feed-shared-update-v2__description');
+
+      let text = '';
+      if (textElement) {
+        // Get text content and clean it up
+        text = textElement.textContent?.trim() || '';
+        // Remove "see more" and other UI text
+        text = text.replace(/\.\.\.see more$/, '').replace(/see more$/, '').trim();
+      }
+
+      // Extract hashtags
+      const hashtagElements = postElement.querySelectorAll('a[href*="hashtag/"]');
+      const hashtags = Array.from(hashtagElements).map(el => el.textContent.trim()).filter(Boolean);
+
+      // Extract engagement metrics
+      let engagement = '';
+      const reactionsElement = postElement.querySelector('.social-counts-reactions');
+      const commentsElement = postElement.querySelector('.social-counts-comments');
+      const sharesElement = postElement.querySelector('.social-counts-shares');
+
+      if (reactionsElement || commentsElement || sharesElement) {
+        engagement = `${reactionsElement?.textContent?.trim() || '0'} reactions, ${commentsElement?.textContent?.trim() || '0'} comments, ${sharesElement?.textContent?.trim() || '0'} shares`;
+      }
+
+      // Extract post type/category
+      let category = 'post';
+      if (postElement.querySelector('.update-components-article')) {
+        category = 'article';
+      } else if (postElement.querySelector('.update-components-image')) {
+        category = 'image_post';
+      } else if (postElement.querySelector('.update-components-video')) {
+        category = 'video_post';
+      }
+
+      return {
+        id: postId,
+        author,
+        text,
+        hashtags,
+        engagement,
+        category,
+        timestamp: new Date().toISOString(),
+        url: window.location.href,
+      };
+    } catch (error) {
+      console.warn('LinkedIn Buddy: Error extracting post data:', error);
+      return null;
+    }
+  }
+
+  async syncPostsWithAPI(posts) {
+    try {
+      if (posts.length === 0) return;
+
+      const response = await fetch(`${this.apiBaseUrl}/api/posts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ posts }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log(`LinkedIn Buddy: Synced ${result.postsReceived} posts with API`);
+        this.lastPostSync = Date.now();
+      } else {
+        console.warn('LinkedIn Buddy: Failed to sync posts with API:', response.status);
+      }
+    } catch (error) {
+      console.warn('LinkedIn Buddy: API sync failed (server might be offline):', error.message);
+    }
+  }
+
+  async searchPostsWithRAG(query) {
+    try {
+      const response = await fetch(`${this.apiBaseUrl}/api/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query,
+          maxResults: 5,
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        return result.response || 'I found some information but couldn\'t generate a response.';
+      } else {
+        throw new Error(`API request failed: ${response.status}`);
+      }
+    } catch (error) {
+      console.warn('LinkedIn Buddy: RAG search failed:', error);
+
+      // Fallback to local search if API is unavailable
+      return this.localPostSearch(query);
+    }
+  }
+
+  localPostSearch(query) {
+    if (this.postDatabase.length === 0) {
+      return 'I don\'t have any LinkedIn posts available for analysis yet. Please wait a moment for posts to be extracted from the page.';
+    }
+
+    const lowerQuery = query.toLowerCase();
+    const relevantPosts = this.postDatabase.filter(post =>
+      post.text.toLowerCase().includes(lowerQuery) ||
+      post.author.toLowerCase().includes(lowerQuery) ||
+      post.hashtags.some(tag => tag.toLowerCase().includes(lowerQuery))
+    ).slice(0, 3);
+
+    if (relevantPosts.length === 0) {
+      return `I searched through ${this.postDatabase.length} LinkedIn posts but couldn't find content directly related to "${query}". Try asking about different topics or more general questions.`;
+    }
+
+    let response = `I found ${relevantPosts.length} relevant posts about "${query}":\n\n`;
+
+    relevantPosts.forEach((post, index) => {
+      response += `${index + 1}. ${post.author}: ${post.text.substring(0, 150)}${post.text.length > 150 ? '...' : ''}\n\n`;
+    });
+
+    return response;
+  }
+
+  addTypingIndicator() {
+    const messagesContainer = this.chatWidget.querySelector('#chatMessages');
+    const typingDiv = document.createElement('div');
+    typingDiv.className = 'chat-message assistant typing-indicator';
+    typingDiv.innerHTML = `
+      <div class="typing-dots">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+    `;
+    messagesContainer.appendChild(typingDiv);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  }
+
+  removeTypingIndicator() {
+    const typingIndicator = this.chatWidget.querySelector('.typing-indicator');
+    if (typingIndicator) {
+      typingIndicator.remove();
     }
   }
 
