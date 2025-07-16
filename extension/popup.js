@@ -1,33 +1,21 @@
 document.addEventListener('DOMContentLoaded', function () {
-  const enhancedFeedToggle = document.getElementById('enhancedFeed');
-  const quickActionsToggle = document.getElementById('quickActions');
   const autoExpandPostsToggle = document.getElementById('autoExpandPosts');
   const hideSponsoredToggle = document.getElementById('hideSponsored');
   const hideRecommendedToggle = document.getElementById('hideRecommended');
+  const hideImagesToggle = document.getElementById('hideImages');
   const chatAssistantToggle = document.getElementById('chatAssistant');
   const openChatButton = document.getElementById('openChat');
 
   // Load saved settings
-  chrome.storage.sync.get(['enhancedFeed', 'quickActions', 'autoExpandPosts', 'autoHideSponsored', 'autoHideRecommended', 'chatAssistant'], function (result) {
-    enhancedFeedToggle.checked = result.enhancedFeed || false;
-    quickActionsToggle.checked = result.quickActions || false;
+  chrome.storage.sync.get(['autoExpandPosts', 'autoHideSponsored', 'autoHideRecommended', 'hideImages', 'chatAssistant'], function (result) {
     autoExpandPostsToggle.checked = result.autoExpandPosts !== undefined ? result.autoExpandPosts : true;
     hideSponsoredToggle.checked = result.autoHideSponsored !== undefined ? result.autoHideSponsored : false;
     hideRecommendedToggle.checked = result.autoHideRecommended !== undefined ? result.autoHideRecommended : false;
+    hideImagesToggle.checked = result.hideImages !== undefined ? result.hideImages : false;
     chatAssistantToggle.checked = result.chatAssistant || false;
   });
 
   // Save settings when toggles change
-  enhancedFeedToggle.addEventListener('change', function () {
-    chrome.storage.sync.set({ enhancedFeed: this.checked });
-    sendMessageToContentScript({ action: 'toggleEnhancedFeed', enabled: this.checked });
-  });
-
-  quickActionsToggle.addEventListener('change', function () {
-    chrome.storage.sync.set({ quickActions: this.checked });
-    sendMessageToContentScript({ action: 'toggleQuickActions', enabled: this.checked });
-  });
-
   autoExpandPostsToggle.addEventListener('change', function () {
     chrome.storage.sync.set({ autoExpandPosts: this.checked });
     sendMessageToContentScript({ action: 'toggleAutoExpandPosts', enabled: this.checked });
@@ -41,6 +29,11 @@ document.addEventListener('DOMContentLoaded', function () {
   hideRecommendedToggle.addEventListener('change', function () {
     chrome.storage.sync.set({ autoHideRecommended: this.checked });
     sendMessageToContentScript({ action: 'toggleAutoHideRecommended', enabled: this.checked });
+  });
+
+  hideImagesToggle.addEventListener('change', function () {
+    chrome.storage.sync.set({ hideImages: this.checked });
+    sendMessageToContentScript({ action: 'toggleHideImages', enabled: this.checked });
   });
 
   chatAssistantToggle.addEventListener('change', function () {

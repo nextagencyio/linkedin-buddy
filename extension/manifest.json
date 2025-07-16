@@ -5,16 +5,23 @@
   "description": "A LinkedIn companion that enhances your LinkedIn experience with additional features and modifications",
   "permissions": [
     "activeTab",
-    "storage"
+    "storage",
+    "cookies"
   ],
   "host_permissions": [
     "https://www.linkedin.com/*"
   ],
   "content_scripts": [
     {
-      "matches": ["https://www.linkedin.com/*"],
-      "js": ["content.js"],
-      "css": ["styles.css"],
+      "matches": [
+        "https://www.linkedin.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "styles.css"
+      ],
       "run_at": "document_end"
     }
   ],
