@@ -662,18 +662,17 @@ class LinkedInBuddy {
       sponsoredTimeout = setTimeout(() => {
         try {
           mutations.forEach((mutation) => {
-            // Only process feed-related mutations
-            const target = mutation.target;
-            if (!target || !target.closest) return;
-
-            const feedContainer = target.closest('.scaffold-layout__main') ||
-              target.closest('.feed-container-v2');
-
-            if (!feedContainer) return;
-
             mutation.addedNodes.forEach((node) => {
               if (node.nodeType === 1) { // Element node
-                this.hideNewSponsoredPosts(node);
+                // Check if this node or any of its children contain posts
+                if (node.matches && (
+                  node.matches('.feed-shared-update-v2') ||
+                  node.matches('[data-id^="urn:li:activity"]') ||
+                  node.querySelector('.feed-shared-update-v2') ||
+                  node.querySelector('[data-id^="urn:li:activity"]')
+                )) {
+                  this.hideNewSponsoredPosts(node);
+                }
               }
             });
           });
@@ -694,37 +693,79 @@ class LinkedInBuddy {
     setTimeout(() => {
       this.hideNewSponsoredPosts(document);
     }, 1500);
+
+    // Add periodic check to catch any sponsored posts that might slip through
+    if (this.sponsoredPeriodicCheck) {
+      clearInterval(this.sponsoredPeriodicCheck);
+    }
+    this.sponsoredPeriodicCheck = setInterval(() => {
+      if (this.isHomepage() && !this.isNotificationsPage()) {
+        this.hideNewSponsoredPosts(document);
+      }
+    }, 3000);
   }
 
   hideNewSponsoredPosts(container) {
     let hiddenCount = 0;
 
-    // Find all feed posts
-    const feedPosts = container.querySelectorAll ? container.querySelectorAll('.feed-shared-update-v2') : [];
+    // Find all feed posts using multiple selectors for better coverage
+    const postSelectors = [
+      '.feed-shared-update-v2',
+      '[data-id^="urn:li:activity"]',
+      '[data-test-id="main-feed-activity-card"]'
+    ];
+
+    let feedPosts = [];
+    postSelectors.forEach(selector => {
+      if (container.querySelectorAll) {
+        const posts = container.querySelectorAll(selector);
+        feedPosts = feedPosts.concat(Array.from(posts));
+      }
+    });
+
+    // Remove duplicates
+    feedPosts = [...new Set(feedPosts)];
 
     feedPosts.forEach(post => {
+      // Skip if already hidden
+      if (post.style.display === 'none') return;
+
       // Check if post has the dismiss/hide button - if not, it's likely a sponsored post
       const hideButton = post.querySelector('.feed-shared-control-menu__hide-post-button');
 
-      if (!hideButton && post.style.display !== 'none') {
-        // Double-check with some additional indicators to be sure
-        const hasPromotedText = post.textContent.includes('Promoted by') ||
-          post.textContent.includes('Sponsored by') ||
-          post.textContent.includes('Promoted') ||
-          post.textContent.includes('Sponsored');
+      if (!hideButton) {
+        // Enhanced detection for sponsored content
+        const postText = post.textContent || '';
+        
+        // Check for promoted/sponsored text with better patterns
+        const hasPromotedText = /\b(Promoted|Sponsored)\b/i.test(postText) ||
+          /\b(Promoted by|Sponsored by)\b/i.test(postText) ||
+          /\bAd\b/i.test(postText);
 
+        // Check for follow button (common in sponsored posts)
         const hasFollowButton = post.querySelector('.update-components-actor__follow-button');
 
-        // If no hide button AND (has promoted text OR has follow button), it's likely sponsored
-        if (hasPromotedText || hasFollowButton) {
+        // Check for other sponsored indicators
+        const hasPromotedLabel = post.querySelector('[aria-label*="Promoted"]') ||
+          post.querySelector('[aria-label*="Sponsored"]');
+
+        // Check for sponsored data attributes
+        const hasSponsoredData = post.hasAttribute('data-id') &&
+          post.getAttribute('data-id').includes('sponsoredUpdate');
+
+        // Check specifically for "Promoted" in actor sub-description
+        const actorSubDescription = post.querySelector('.update-components-actor__sub-description');
+        const hasPromotedInSubDesc = actorSubDescription && 
+          /\b(Promoted|Sponsored)\b/i.test(actorSubDescription.textContent);
+
+        // Check for sponsored content links (common pattern)
+        const hasSponsoredLink = post.querySelector('a[href*="utm_"]') ||
+          post.querySelector('a[attributionsrc*="ads.linkedin.com"]');
+
+        // If no hide button AND has sponsored indicators, hide it
+        if (hasPromotedText || hasPromotedInSubDesc || hasFollowButton || hasPromotedLabel || hasSponsoredData || hasSponsoredLink) {
           post.style.display = 'none';
           hiddenCount++;
-          console.log('LinkedIn Buddy: Hidden sponsored post (no dismiss button)', {
-            post: post,
-            hasPromotedText: hasPromotedText,
-            hasFollowButton: !!hasFollowButton,
-            promotedText: hasPromotedText ? post.textContent.match(/(Promoted by|Sponsored by)[^.]*/) : null
-          });
         }
       }
     });
@@ -732,32 +773,37 @@ class LinkedInBuddy {
     // Also check for explicit sponsored selectors as backup
     const sponsoredSelectors = [
       '[data-id*="urn:li:sponsoredUpdate"]',
+      '[data-id*="sponsoredUpdate"]',
       '[aria-label*="Promoted"]',
       '[aria-label*="Sponsored"]',
-      '[data-test-id*="sponsored"]'
+      '[data-test-id*="sponsored"]',
+      '.ad-banner-container',
+      '.sponsored-post'
     ];
 
     sponsoredSelectors.forEach(selector => {
       const sponsoredPosts = container.querySelectorAll ? container.querySelectorAll(selector) : [];
       sponsoredPosts.forEach(post => {
-        const postContainer = post.closest('.feed-shared-update-v2') || post.closest('[data-id^="urn:li:activity"]') || post;
+        const postContainer = post.closest('.feed-shared-update-v2') || 
+          post.closest('[data-id^="urn:li:activity"]') || 
+          post.closest('[data-test-id="main-feed-activity-card"]') || 
+          post;
         if (postContainer && postContainer.style.display !== 'none') {
           postContainer.style.display = 'none';
           hiddenCount++;
-          console.log('LinkedIn Buddy: Hidden sponsored post (selector match)', selector, postContainer);
         }
       });
     });
-
-    if (hiddenCount > 0) {
-      console.log(`LinkedIn Buddy: Auto-hidden ${hiddenCount} sponsored posts`);
-    }
   }
 
   stopAutoHideSponsored() {
     if (this.sponsoredObserver) {
       this.sponsoredObserver.disconnect();
       this.sponsoredObserver = null;
+    }
+    if (this.sponsoredPeriodicCheck) {
+      clearInterval(this.sponsoredPeriodicCheck);
+      this.sponsoredPeriodicCheck = null;
     }
   }
 
@@ -882,21 +928,6 @@ class LinkedInBuddy {
       (pathname === '' && url === 'https://www.linkedin.com/')
     );
 
-    // Debug logging
-    if (window.location.hostname.includes('linkedin.com')) {
-      console.log('LinkedIn Buddy - Homepage check:', {
-        url: url,
-        pathname: pathname,
-        isHomepage: isHomepage,
-        checks: {
-          'pathname === /feed/': pathname === '/feed/',
-          'pathname === /': pathname === '/',
-          'pathname.startsWith(/feed)': pathname.startsWith('/feed'),
-          'url.includes(/feed/)': url.includes('/feed/'),
-          'root domain check': (pathname === '' && url === 'https://www.linkedin.com/')
-        }
-      });
-    }
 
     return isHomepage;
   }
@@ -941,8 +972,6 @@ class LinkedInBuddy {
     this.createChatWidget();
     this.setupMessageListener();
     
-    // Clean up any existing stats injections
-    this.cleanupStatsInjections();
 
     // Start extracting and syncing post content
     this.startPostExtraction();
@@ -981,11 +1010,6 @@ class LinkedInBuddy {
     return false;
   }
 
-  cleanupStatsInjections() {
-    const addedStats = document.querySelectorAll('.linkedin-buddy-stat');
-    addedStats.forEach(stat => stat.remove());
-    console.log(`LinkedIn Buddy: Cleaned up ${addedStats.length} existing stat injections`);
-  }
 
   setupUrlChangeListener() {
     if (this.urlChangeObserver) {
@@ -1310,19 +1334,17 @@ class LinkedInBuddy {
       processingTimeout = setTimeout(() => {
         try {
           mutations.forEach((mutation) => {
-            // Only process mutations in the main feed area
-            const target = mutation.target;
-            if (!target || !target.closest) return;
-
-            const feedContainer = target.closest('.scaffold-layout__main') ||
-              target.closest('.feed-container-v2') ||
-              target.closest('.application-outlet');
-
-            if (!feedContainer) return;
-
             mutation.addedNodes.forEach((node) => {
               if (node.nodeType === 1) { // Element node
-                this.hideImagesInNode(node);
+                // Check if this node or any of its children contain images
+                if (node.matches && (
+                  node.matches('.update-components-image') ||
+                  node.querySelector('.update-components-image') ||
+                  node.matches('.feed-shared-update-v2') ||
+                  node.querySelector('.feed-shared-update-v2')
+                )) {
+                  this.hideImagesInNode(node);
+                }
               }
             });
           });
@@ -1343,12 +1365,26 @@ class LinkedInBuddy {
     setTimeout(() => {
       this.hideImagesInNode(document.body);
     }, 1000);
+
+    // Add periodic check to catch any images that might slip through
+    if (this.imagePeriodicCheck) {
+      clearInterval(this.imagePeriodicCheck);
+    }
+    this.imagePeriodicCheck = setInterval(() => {
+      if (this.isHomepage() && !this.isNotificationsPage()) {
+        this.hideImagesInNode(document.body);
+      }
+    }, 2000);
   }
 
   stopImageHiding() {
     if (this.imageObserver) {
       this.imageObserver.disconnect();
       this.imageObserver = null;
+    }
+    if (this.imagePeriodicCheck) {
+      clearInterval(this.imagePeriodicCheck);
+      this.imagePeriodicCheck = null;
     }
   }
 
@@ -2810,39 +2846,67 @@ Or ask: "What's trending?" • "Show me AI posts"`;
   hideSponsoredPosts() {
     // Only hide posts on homepage/feed page
     if (!this.isHomepage() || this.isNotificationsPage()) {
-      console.log('LinkedIn Buddy: Skipping sponsored post hiding - not on homepage/feed');
       return;
     }
 
     let hiddenCount = 0;
 
-    // Find all feed posts
-    const feedPosts = document.querySelectorAll('.feed-shared-update-v2');
-    console.log(`LinkedIn Buddy: Found ${feedPosts.length} feed posts to check`);
+    // Find all feed posts using multiple selectors for better coverage
+    const postSelectors = [
+      '.feed-shared-update-v2',
+      '[data-id^="urn:li:activity"]',
+      '[data-test-id="main-feed-activity-card"]'
+    ];
 
-    feedPosts.forEach((post, index) => {
+    let feedPosts = [];
+    postSelectors.forEach(selector => {
+      const posts = document.querySelectorAll(selector);
+      feedPosts = feedPosts.concat(Array.from(posts));
+    });
+
+    // Remove duplicates
+    feedPosts = [...new Set(feedPosts)];
+
+    feedPosts.forEach(post => {
+      // Skip if already hidden
+      if (post.style.display === 'none') return;
+
       // Check if post has the dismiss/hide button - if not, it's likely a sponsored post
       const hideButton = post.querySelector('.feed-shared-control-menu__hide-post-button');
 
-      if (!hideButton && post.style.display !== 'none') {
-        // Double-check with some additional indicators to be sure
-        const hasPromotedText = post.textContent.includes('Promoted by') ||
-          post.textContent.includes('Sponsored by') ||
-          post.textContent.includes('Promoted') ||
-          post.textContent.includes('Sponsored');
+      if (!hideButton) {
+        // Enhanced detection for sponsored content
+        const postText = post.textContent || '';
+        
+        // Check for promoted/sponsored text with better patterns
+        const hasPromotedText = /\b(Promoted|Sponsored)\b/i.test(postText) ||
+          /\b(Promoted by|Sponsored by)\b/i.test(postText) ||
+          /\bAd\b/i.test(postText);
 
+        // Check for follow button (common in sponsored posts)
         const hasFollowButton = post.querySelector('.update-components-actor__follow-button');
 
-        // If no hide button AND (has promoted text OR has follow button), it's likely sponsored
-        if (hasPromotedText || hasFollowButton) {
+        // Check for other sponsored indicators
+        const hasPromotedLabel = post.querySelector('[aria-label*="Promoted"]') ||
+          post.querySelector('[aria-label*="Sponsored"]');
+
+        // Check for sponsored data attributes
+        const hasSponsoredData = post.hasAttribute('data-id') &&
+          post.getAttribute('data-id').includes('sponsoredUpdate');
+
+        // Check specifically for "Promoted" in actor sub-description
+        const actorSubDescription = post.querySelector('.update-components-actor__sub-description');
+        const hasPromotedInSubDesc = actorSubDescription && 
+          /\b(Promoted|Sponsored)\b/i.test(actorSubDescription.textContent);
+
+        // Check for sponsored content links (common pattern)
+        const hasSponsoredLink = post.querySelector('a[href*="utm_"]') ||
+          post.querySelector('a[attributionsrc*="ads.linkedin.com"]');
+
+        // If no hide button AND has sponsored indicators, hide it
+        if (hasPromotedText || hasPromotedInSubDesc || hasFollowButton || hasPromotedLabel || hasSponsoredData || hasSponsoredLink) {
           post.style.display = 'none';
           hiddenCount++;
-          console.log('LinkedIn Buddy: Hidden sponsored post (no dismiss button - manual)', {
-            post: post,
-            hasPromotedText: hasPromotedText,
-            hasFollowButton: !!hasFollowButton,
-            promotedText: hasPromotedText ? post.textContent.match(/(Promoted by|Sponsored by)[^.]*/) : null
-          });
         }
       }
     });
@@ -2850,19 +2914,24 @@ Or ask: "What's trending?" • "Show me AI posts"`;
     // Also check for explicit sponsored selectors as backup
     const sponsoredSelectors = [
       '[data-id*="urn:li:sponsoredUpdate"]',
+      '[data-id*="sponsoredUpdate"]',
       '[aria-label*="Promoted"]',
       '[aria-label*="Sponsored"]',
-      '[data-test-id*="sponsored"]'
+      '[data-test-id*="sponsored"]',
+      '.ad-banner-container',
+      '.sponsored-post'
     ];
 
     sponsoredSelectors.forEach(selector => {
       const sponsoredPosts = document.querySelectorAll(selector);
       sponsoredPosts.forEach(post => {
-        const postContainer = post.closest('.feed-shared-update-v2') || post.closest('[data-id^="urn:li:activity"]') || post;
+        const postContainer = post.closest('.feed-shared-update-v2') || 
+          post.closest('[data-id^="urn:li:activity"]') || 
+          post.closest('[data-test-id="main-feed-activity-card"]') || 
+          post;
         if (postContainer && postContainer.style.display !== 'none') {
           postContainer.style.display = 'none';
           hiddenCount++;
-          console.log('LinkedIn Buddy: Hidden sponsored post (selector match - manual)', selector, postContainer);
         }
       });
     });
