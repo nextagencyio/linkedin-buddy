@@ -4,12 +4,8 @@ class LinkedInBuddy {
   constructor() {
     this.isInitialized = false;
     this.imageObserver = null;
-    this.sponsoredObserver = null;
-    this.recommendedObserver = null;
     this.settings = {
       autoExpandPosts: true,
-      autoHideSponsored: false,
-      autoHideRecommended: false,
       hideImages: false,
     };
 
@@ -198,114 +194,6 @@ class LinkedInBuddy {
     return null;
   }
 
-  startAutoHideSponsored() {
-    // Create observer for automatically hiding sponsored posts
-    if (this.sponsoredObserver) {
-      this.sponsoredObserver.disconnect();
-    }
-
-    // Run immediately
-    this.hideSponsoredPosts();
-
-    // Set up observer for new posts
-    this.sponsoredObserver = new MutationObserver((mutations) => {
-      // Only process mutations if we're on the homepage and not notifications
-      if (!this.isHomepage() || this.isNotificationsPage()) {
-        return;
-      }
-
-      let shouldCheck = false;
-      mutations.forEach((mutation) => {
-        mutation.addedNodes.forEach((node) => {
-          if (node.nodeType === 1) { // Element node
-            if (node.classList?.contains('feed-shared-update-v2') ||
-              node.querySelector?.('.feed-shared-update-v2')) {
-              shouldCheck = true;
-            }
-          }
-        });
-      });
-
-      if (shouldCheck) {
-        // Throttle the check
-        clearTimeout(this.sponsoredTimeout);
-        this.sponsoredTimeout = setTimeout(() => {
-          this.hideSponsoredPosts();
-        }, 500);
-      }
-    });
-
-    this.sponsoredObserver.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
-  }
-
-  stopAutoHideSponsored() {
-    if (this.sponsoredObserver) {
-      this.sponsoredObserver.disconnect();
-      this.sponsoredObserver = null;
-    }
-    if (this.sponsoredTimeout) {
-      clearTimeout(this.sponsoredTimeout);
-      this.sponsoredTimeout = null;
-    }
-  }
-
-  startAutoHideRecommended() {
-    // Create observer for automatically hiding recommended posts
-    if (this.recommendedObserver) {
-      this.recommendedObserver.disconnect();
-    }
-
-    // Run immediately
-    this.hideRecommendedPosts();
-
-    // Set up observer for new posts
-    this.recommendedObserver = new MutationObserver((mutations) => {
-      // Only process mutations if we're on the homepage and not notifications
-      if (!this.isHomepage() || this.isNotificationsPage()) {
-        return;
-      }
-
-      let shouldCheck = false;
-      mutations.forEach((mutation) => {
-        mutation.addedNodes.forEach((node) => {
-          if (node.nodeType === 1) {
-            if (node.classList?.contains('feed-shared-update-v2') ||
-              node.querySelector?.('.feed-shared-update-v2') ||
-              node.querySelector?.('.update-components-header__text-view')) {
-              shouldCheck = true;
-            }
-          }
-        });
-      });
-
-      if (shouldCheck) {
-        clearTimeout(this.recommendedTimeout);
-        this.recommendedTimeout = setTimeout(() => {
-          this.hideRecommendedPosts();
-        }, 500);
-      }
-    });
-
-    this.recommendedObserver.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
-  }
-
-  stopAutoHideRecommended() {
-    if (this.recommendedObserver) {
-      this.recommendedObserver.disconnect();
-      this.recommendedObserver = null;
-    }
-    if (this.recommendedTimeout) {
-      clearTimeout(this.recommendedTimeout);
-      this.recommendedTimeout = null;
-    }
-  }
-
   hideImagesInNode(node) {
     // Only hide images if we're on the homepage
     if (!this.isHomepage() || this.isNotificationsPage()) {
@@ -456,59 +344,6 @@ class LinkedInBuddy {
     }
   }
 
-  autoHideRecommendedContent() {
-    // Only auto-hide on homepage/feed page
-    if (!this.isHomepage() || this.isNotificationsPage()) {
-      return;
-    }
-
-    let hiddenCount = 0;
-
-    // Find posts with "Recommended for you" header
-    const recommendedHeaders = document.querySelectorAll('.update-components-header__text-view');
-
-    recommendedHeaders.forEach(header => {
-      if (header.textContent.trim() === 'Recommended for you') {
-        const feedPost = header.closest('.feed-shared-update-v2');
-        if (feedPost && feedPost.style.display !== 'none') {
-          feedPost.style.display = 'none';
-          hiddenCount++;
-          console.log('LinkedIn Buddy: Auto-hidden recommended post', feedPost);
-        }
-      }
-    });
-
-    // Also check for aggregated recommendation containers
-    const aggregatedSelectors = [
-      '[data-urn*="urn:li:aggregate:"]',
-      '.feed-shared-aggregated-content',
-      '.update-components-feed-discovery-entity'
-    ];
-
-    aggregatedSelectors.forEach(selector => {
-      const elements = document.querySelectorAll(selector);
-      elements.forEach(element => {
-        const hasRecommendedText = element.textContent.includes('Recommended for you') ||
-          element.textContent.includes('People who are in') ||
-          element.textContent.includes('Trending pages in your network') ||
-          element.querySelector('.update-components-feed-discovery-entity');
-
-        if (hasRecommendedText) {
-          const postContainer = element.closest('.feed-shared-update-v2') || element;
-          if (postContainer && postContainer.style.display !== 'none') {
-            postContainer.style.display = 'none';
-            hiddenCount++;
-            console.log('LinkedIn Buddy: Hidden recommended aggregated content', postContainer);
-          }
-        }
-      });
-    });
-
-    if (hiddenCount > 0) {
-      console.log(`LinkedIn Buddy: Auto-hidden ${hiddenCount} recommended posts`);
-    }
-  }
-
   isHomepage() {
     const url = window.location.href;
     const pathname = window.location.pathname;
@@ -522,7 +357,6 @@ class LinkedInBuddy {
       // Handle case where we're on root LinkedIn domain
       (pathname === '' && url === 'https://www.linkedin.com/')
     );
-
 
     return isHomepage;
   }
@@ -589,14 +423,11 @@ class LinkedInBuddy {
     // All features only work on homepage/feed page
     if (this.isHomepage()) {
       return this.settings.autoExpandPosts ||
-        this.settings.autoHideSponsored ||
-        this.settings.autoHideRecommended ||
         this.settings.hideImages;
     }
 
     return false;
   }
-
 
   setupUrlChangeListener() {
     if (this.urlChangeObserver) {
@@ -691,11 +522,9 @@ class LinkedInBuddy {
   }
 
   loadSettings() {
-    chrome.storage.sync.get(['autoExpandPosts', 'autoHideSponsored', 'autoHideRecommended', 'hideImages'], (result) => {
+    chrome.storage.sync.get(['autoExpandPosts', 'hideImages'], (result) => {
       this.settings = {
         autoExpandPosts: result.autoExpandPosts !== undefined ? result.autoExpandPosts : true,
-        autoHideSponsored: result.autoHideSponsored || false,
-        autoHideRecommended: result.autoHideRecommended || false,
         hideImages: result.hideImages || false,
       };
 
@@ -712,8 +541,6 @@ class LinkedInBuddy {
     console.log('LinkedIn Buddy: Applying settings on page:', window.location.href, 'isHomepage:', this.isHomepage());
 
     this.toggleAutoExpandPosts(this.settings.autoExpandPosts);
-    this.toggleAutoHideSponsored(this.settings.autoHideSponsored);
-    this.toggleAutoHideRecommended(this.settings.autoHideRecommended);
     this.toggleHideImages(this.settings.hideImages);
 
     // If no features are enabled, ensure we clean up everything
@@ -723,8 +550,6 @@ class LinkedInBuddy {
   }
 
   cleanupAllFeatures() {
-    this.stopAutoHideSponsored();
-    this.stopAutoHideRecommended();
     this.stopImageHiding();
     this.restoreAllImages();
     this.stopObservingForNewPosts();
@@ -741,33 +566,11 @@ class LinkedInBuddy {
         case 'toggleAutoExpandPosts':
           this.toggleAutoExpandPosts(message.enabled);
           break;
-        case 'toggleAutoHideSponsored':
-          this.toggleAutoHideSponsored(message.enabled);
-          break;
-        case 'toggleAutoHideRecommended':
-          this.toggleAutoHideRecommended(message.enabled);
-          break;
         case 'toggleHideImages':
           this.toggleHideImages(message.enabled);
           break;
       }
     });
-  }
-
-  toggleAutoHideSponsored(enabled) {
-    if (enabled && this.isHomepage() && !this.isNotificationsPage()) {
-      this.startAutoHideSponsored();
-    } else {
-      this.stopAutoHideSponsored();
-    }
-  }
-
-  toggleAutoHideRecommended(enabled) {
-    if (enabled && this.isHomepage() && !this.isNotificationsPage()) {
-      this.startAutoHideRecommended();
-    } else {
-      this.stopAutoHideRecommended();
-    }
   }
 
   toggleHideImages(enabled) {
@@ -777,223 +580,6 @@ class LinkedInBuddy {
       this.stopImageHiding();
       this.restoreAllImages();
     }
-  }
-
-  toggleEnhancedFeed(enabled) {
-    if (enabled) {
-      document.body.classList.add('linkedin-buddy-enhanced');
-      this.enhanceFeedItems();
-    } else {
-      document.body.classList.remove('linkedin-buddy-enhanced');
-    }
-  }
-
-  enhanceFeedItems() {
-    // Monitor for new feed items and enhance them
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        mutation.addedNodes.forEach((node) => {
-          if (node.nodeType === 1) { // Element node
-            const feedItems = node.querySelectorAll && node.querySelectorAll('[data-id^="urn:li:activity"]');
-            if (feedItems) {
-              feedItems.forEach(item => {
-                item.classList.add('feed-item');
-              });
-            }
-          }
-        });
-      });
-    });
-
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
-  }
-
-  toggleQuickActions(enabled) {
-    if (enabled) {
-      this.quickActions.classList.add('visible');
-    } else {
-      this.quickActions.classList.remove('visible');
-    }
-  }
-
-  executeQuickAction(action) {
-    switch (action) {
-      case 'copyProfile':
-        const profileUrl = window.location.href;
-        navigator.clipboard.writeText(profileUrl);
-        this.showNotification('Profile URL copied to clipboard!');
-        break;
-      case 'exportConnections':
-        this.showNotification('Connection export feature coming soon!');
-        break;
-      case 'hideSponsored':
-        this.hideSponsoredPosts();
-        // Also enable auto-hide for convenience
-        this.toggleAutoHideSponsored(true);
-        break;
-      case 'hideRecommended':
-        this.hideRecommendedPosts();
-        // Also enable auto-hide for convenience
-        this.toggleAutoHideRecommended(true);
-        break;
-      case 'enhanceSearch':
-        this.showNotification('Search enhancement feature coming soon!');
-        break;
-    }
-  }
-
-  hideSponsoredPosts() {
-    // Only hide posts on homepage/feed page
-    if (!this.isHomepage() || this.isNotificationsPage()) {
-      return;
-    }
-
-    let hiddenCount = 0;
-
-    // Find all feed posts using multiple selectors for better coverage
-    const postSelectors = [
-      '.feed-shared-update-v2',
-      '[data-id^="urn:li:activity"]',
-      '[data-test-id="main-feed-activity-card"]'
-    ];
-
-    let feedPosts = [];
-    postSelectors.forEach(selector => {
-      const posts = document.querySelectorAll(selector);
-      feedPosts = feedPosts.concat(Array.from(posts));
-    });
-
-    // Remove duplicates
-    feedPosts = [...new Set(feedPosts)];
-
-    feedPosts.forEach(post => {
-      // Skip if already hidden
-      if (post.style.display === 'none') return;
-
-      // Check if post has the dismiss/hide button - if not, it's likely a sponsored post
-      const hideButton = post.querySelector('.feed-shared-control-menu__hide-post-button');
-
-      if (!hideButton) {
-        // Enhanced detection for sponsored content
-        const postText = post.textContent || '';
-
-        // Check for promoted/sponsored text with better patterns
-        const hasPromotedText = /\b(Promoted|Sponsored)\b/i.test(postText) ||
-          /\b(Promoted by|Sponsored by)\b/i.test(postText) ||
-          /\bAd\b/i.test(postText);
-
-        // Check for follow button (common in sponsored posts)
-        const hasFollowButton = post.querySelector('.update-components-actor__follow-button');
-
-        // Check for other sponsored indicators
-        const hasPromotedLabel = post.querySelector('[aria-label*="Promoted"]') ||
-          post.querySelector('[aria-label*="Sponsored"]');
-
-        // Check for sponsored data attributes
-        const hasSponsoredData = post.hasAttribute('data-id') &&
-          post.getAttribute('data-id').includes('sponsoredUpdate');
-
-        // Check specifically for "Promoted" in actor sub-description
-        const actorSubDescription = post.querySelector('.update-components-actor__sub-description');
-        const hasPromotedInSubDesc = actorSubDescription &&
-          /\b(Promoted|Sponsored)\b/i.test(actorSubDescription.textContent);
-
-        // Check for sponsored content links (common pattern)
-        const hasSponsoredLink = post.querySelector('a[href*="utm_"]') ||
-          post.querySelector('a[attributionsrc*="ads.linkedin.com"]');
-
-        // If no hide button AND has sponsored indicators, hide it
-        if (hasPromotedText || hasPromotedInSubDesc || hasFollowButton || hasPromotedLabel || hasSponsoredData || hasSponsoredLink) {
-          post.style.display = 'none';
-          hiddenCount++;
-        }
-      }
-    });
-
-    // Also check for explicit sponsored selectors as backup
-    const sponsoredSelectors = [
-      '[data-id*="urn:li:sponsoredUpdate"]',
-      '[data-id*="sponsoredUpdate"]',
-      '[aria-label*="Promoted"]',
-      '[aria-label*="Sponsored"]',
-      '[data-test-id*="sponsored"]',
-      '.ad-banner-container',
-      '.sponsored-post'
-    ];
-
-    sponsoredSelectors.forEach(selector => {
-      const sponsoredPosts = document.querySelectorAll(selector);
-      sponsoredPosts.forEach(post => {
-        const postContainer = post.closest('.feed-shared-update-v2') ||
-          post.closest('[data-id^="urn:li:activity"]') ||
-          post.closest('[data-test-id="main-feed-activity-card"]') ||
-          post;
-        if (postContainer && postContainer.style.display !== 'none') {
-          postContainer.style.display = 'none';
-          hiddenCount++;
-        }
-      });
-    });
-
-    this.showNotification(`Hidden ${hiddenCount} sponsored posts`);
-  }
-
-  hideRecommendedPosts() {
-    // Only hide posts on homepage/feed page
-    if (!this.isHomepage() || this.isNotificationsPage()) {
-      console.log('LinkedIn Buddy: Skipping recommended post hiding - not on homepage/feed');
-      return;
-    }
-
-    let hiddenCount = 0;
-
-    // Find posts with "Recommended for you" header
-    const recommendedHeaders = document.querySelectorAll('.update-components-header__text-view');
-    console.log(`LinkedIn Buddy: Found ${recommendedHeaders.length} header elements to check`);
-
-    recommendedHeaders.forEach((header, index) => {
-      if (header.textContent.trim() === 'Recommended for you') {
-        // Find the containing feed post
-        const feedPost = header.closest('.feed-shared-update-v2');
-        if (feedPost && feedPost.style.display !== 'none') {
-          feedPost.style.display = 'none';
-          hiddenCount++;
-          console.log('LinkedIn Buddy: Hidden recommended post (manual)', feedPost);
-        }
-      }
-    });
-
-    // Also look for aggregated recommendation containers
-    const aggregatedSelectors = [
-      '[data-urn*="urn:li:aggregate:"]',
-      '.feed-shared-aggregated-content',
-      '.update-components-feed-discovery-entity'
-    ];
-
-    aggregatedSelectors.forEach(selector => {
-      const elements = document.querySelectorAll(selector);
-      elements.forEach(element => {
-        // Check if this contains recommendation content
-        const hasRecommendedText = element.textContent.includes('Recommended for you') ||
-          element.textContent.includes('People who are in') ||
-          element.textContent.includes('Trending pages in your network') ||
-          element.querySelector('.update-components-feed-discovery-entity');
-
-        if (hasRecommendedText) {
-          const postContainer = element.closest('.feed-shared-update-v2') || element;
-          if (postContainer && postContainer.style.display !== 'none') {
-            postContainer.style.display = 'none';
-            hiddenCount++;
-            console.log('LinkedIn Buddy: Hidden recommended aggregated content (manual)', postContainer);
-          }
-        }
-      });
-    });
-
-    this.showNotification(`Hidden ${hiddenCount} recommended posts`);
   }
 
   toggleAutoExpandPosts(enabled) {
