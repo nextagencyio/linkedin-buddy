@@ -2,6 +2,10 @@
 
 A browser extension that enhances your LinkedIn experience with feed improvements.
 
+<p align="center">
+  <img src="extension/screenshot.png" alt="LinkedIn Buddy popup" width="350">
+</p>
+
 ## Features
 
 - **Auto-Expand Posts**: Automatically expands truncated "see more" content in feed posts so you can read full posts without clicking
