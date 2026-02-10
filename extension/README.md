@@ -27,6 +27,9 @@ A Chrome extension that enhances your LinkedIn feed with auto-expand and image h
 - `popup.js` - Popup functionality
 - `content.js` - Main content script that runs on LinkedIn
 - `styles.css` - Styling for the extension features
+- `icon16.png` - Toolbar icon
+- `icon48.png` - Extension management icon
+- `icon128.png` - Chrome Web Store icon
 
 ## Development
 

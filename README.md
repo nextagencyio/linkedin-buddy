@@ -16,28 +16,20 @@ linkedin-buddy/
 │   ├── popup.js        # Extension popup logic
 │   ├── popup.html      # Extension popup interface
 │   ├── styles.css      # Custom styles
-│   └── manifest.json   # Extension manifest
-├── index.js            # Node.js API server
-├── package.json        # Node.js dependencies
+│   ├── manifest.json   # Extension manifest
+│   ├── icon16.png      # Toolbar icon
+│   ├── icon48.png      # Extension management icon
+│   └── icon128.png     # Chrome Web Store icon
 └── README.md           # Project documentation
 ```
 
 ## Installation
-
-### Chrome Extension
 
 1. Clone or download this repository
 2. Open Chrome and go to `chrome://extensions/`
 3. Enable "Developer mode" (toggle in top right)
 4. Click "Load unpacked" and select the `extension` folder
 5. Click the LinkedIn Buddy icon in your toolbar to toggle features
-
-### API Server (optional)
-
-```bash
-npm install
-npm start
-```
 
 ## Usage
 
